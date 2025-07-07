@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+aiosqlite
+yt-dlp
+colorama
+ollama
+pyannote.audio
+sqlalchemy
+aiosqlite
+python-multipart
+openai-whisper
+librosa
