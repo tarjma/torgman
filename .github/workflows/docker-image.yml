@@ -32,4 +32,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.vars.outputs.TAG }}
+          tags: ghcr.io/${{ github.event.repository.name }}/${{ github.event.repository.name }}:${{ steps.vars.outputs.TAG }}
