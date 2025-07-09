@@ -3,12 +3,10 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     # Application settings
-    app_name: str = "Torgman - Arabic Video Subtitle Translator"
-    app_version: str = "1.0.0"
-    debug: bool = False
+    app_name: str = "Torgman"
     
     # Data directory - centralized location for all persistent data
-    data_dir: Path = Path("/app/data")
+    data_dir: Path = Path(__file__).parent.parent / "data"
     
     # Database settings
     database_path: Path = data_dir / "torgman.db"
@@ -22,7 +20,7 @@ class Settings(BaseSettings):
     # File storage settings
     projects_dir: Path = data_dir / "projects"  # Each project gets its own folder
     config_dir: Path = data_dir / "config"  # Application configuration files
-    static_dir: Path = Path("static")
+    static_dir: Path = Path(__file__).parent.parent / "static"  # Static files (e.g., favicon, images)
     
     def get_project_dir(self, project_id: str) -> Path:
         """Get the directory path for a specific project"""
@@ -35,10 +33,6 @@ class Settings(BaseSettings):
     
     # WebSocket settings
     websocket_timeout: int = 300
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
 # Create settings instance
 settings = Settings()
