@@ -27,9 +27,19 @@ jobs:
         id: vars
         run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Extract lowercase tag vars
+        id: vars
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_LC=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "owner=${OWNER_LC}" >> $GITHUB_OUTPUT
+          echo "repo=${REPO_LC}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.event.repository.name }}/${{ github.event.repository.name }}:${{ steps.vars.outputs.TAG }}
+          tags: ghcr.io/${{ steps.vars.outputs.owner }}/${{ steps.vars.outputs.repo }}:${{ steps.vars.outputs.tag }}
