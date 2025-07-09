@@ -1,15 +1,35 @@
-name: Docker Image CI
+name: Release Docker to GHCR
 
 on:
-  workflow_dispatch:  # 👈 Only runs when manually triggered
+  release:
+    types: [published]  # Trigger only when a GitHub Release is published
 
 jobs:
-
-  build:
-
+  build-and-push:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      packages: write  # Needed to push to GHCR
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag torgman:$(date +%s)
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract tag version
+        id: vars
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.vars.outputs.TAG }}
