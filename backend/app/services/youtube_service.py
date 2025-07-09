@@ -1,18 +1,23 @@
+import json
 import logging
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict
+
+import requests
 import yt_dlp
+from moviepy import VideoFileClip
 
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
-class YouTubeAudioProcessor:
-    """Process YouTube videos to extract audio for subtitle generation"""
+class YouTubeVideoProcessor:
+    """Process YouTube videos to download video and extract audio for subtitle generation"""
     
     def __init__(self):
-        self.temp_dir = settings.temp_dir / "audio"
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"YouTube audio processor initialized, temp dir: {self.temp_dir}")
+        # No global temp directory needed - each project gets its own folder
+        logger.info("YouTube audio processor initialized")
     
     def get_video_info(self, url: str) -> Dict[str, Any]:
         """Get YouTube video information without downloading"""
@@ -26,30 +31,21 @@ class YouTubeAudioProcessor:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             
-            return {
-                "title": info.get("title", "Unknown Title"),
-                "duration": info.get("duration", 0),
-                "thumbnail": info.get("thumbnail"),
-                "uploader": info.get("uploader"),
-                "description": info.get("description", "")[:500]  # Truncate description
-            }
+        return info
     
-    def extract_audio(self, url: str, project_id: str, resolution: str = "720p") -> str:
-        """Extract audio from YouTube video with specified resolution"""
-            
-        output_path = self.temp_dir / f"{project_id}.wav"
+    def download_video(self, url: str, project_id: str, resolution: str = "720p") -> str:
+        """Download full YouTube video with specified resolution"""
         
-        # Build format selector based on resolution
-        format_selector = self._build_format_selector(resolution)
+        # Get project-specific directory
+        project_dir = settings.get_project_dir(project_id)
+        output_path = project_dir / f"{project_id}_video.%(ext)s"
+        
+        # Build format selector for video (includes both video and audio)
+        format_selector = self._build_video_format_selector(resolution)
         
         ydl_opts = {
             'format': format_selector,
-            'outtmpl': str(output_path).replace('.wav', '.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'wav',
-                'preferredquality': '192',
-            }],
+            'outtmpl': str(output_path),
             'quiet': True,
             'no_warnings': True,
         }
@@ -57,15 +53,70 @@ class YouTubeAudioProcessor:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         
-        if output_path.exists():
-            logger.info(f"Audio extracted successfully: {output_path}")
-            return str(output_path)
+        # Find the downloaded video file (extension is determined by yt-dlp)
+        video_files = list(project_dir.glob(f"{project_id}_video.*"))
+        if video_files:
+            logger.info(f"Video downloaded successfully: {video_files[0]}")
+            return str(video_files[0])
         else:
-            raise Exception("Audio file not found after extraction")
-    
+            raise Exception("Video file not found after download")
+
+    def download_thumbnail(self, url: str, project_id: str) -> str:
+        """Download YouTube video thumbnail"""
+        
+        # Get project-specific directory
+        project_dir = settings.get_project_dir(project_id)
+        
+        # Get video info to find best thumbnail
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+            # Get the best thumbnail URL
+            thumbnail_url = info.get('thumbnail')
+            if not thumbnail_url:
+                # Try to get from thumbnails array
+                thumbnails = info.get('thumbnails', [])
+                if thumbnails:
+                    # Get the highest resolution thumbnail
+                    thumbnail_url = max(thumbnails, key=lambda t: t.get('width', 0) * t.get('height', 0)).get('url')
+        
+        if not thumbnail_url:
+            logger.warning(f"No thumbnail found for video: {url}")
+            return ""
+        
+        # Download thumbnail
+        response = requests.get(thumbnail_url, timeout=30)
+        response.raise_for_status()
+        
+        # Determine file extension from content type or URL
+        content_type = response.headers.get('content-type', '')
+        if 'jpeg' in content_type or 'jpg' in content_type:
+            ext = 'jpg'
+        elif 'png' in content_type:
+            ext = 'png'
+        elif 'webp' in content_type:
+            ext = 'webp'
+        else:
+            # Fallback to jpg
+            ext = 'jpg'
+        
+        thumbnail_path = project_dir / f"{project_id}_thumbnail.{ext}"
+        
+        with open(thumbnail_path, 'wb') as f:
+            f.write(response.content)
+        
+        logger.info(f"Thumbnail downloaded successfully: {thumbnail_path}")
+        return str(thumbnail_path)
+        
+
     def _build_format_selector(self, resolution: str) -> str:
-        """Build yt-dlp format selector based on resolution preference"""
-        # Map resolution preferences to yt-dlp format selectors
+        """Build yt-dlp format selector based on resolution preference (audio only)"""
+        # Map resolution preferences to yt-dlp format selectors for audio extraction
         format_map = {
             "144p": "worst[height<=144]/bestaudio/worst",
             "240p": "best[height<=240]/bestaudio/best",
@@ -79,29 +130,79 @@ class YouTubeAudioProcessor:
         
         # Default to 720p if resolution not recognized
         return format_map.get(resolution, format_map["720p"])
-    
-    def get_available_formats(self, url: str) -> Dict[str, Any]:
-        """Get available video formats and resolutions"""
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
+
+    def _build_video_format_selector(self, resolution: str) -> str:
+        """Build yt-dlp format selector for full video download"""
+        # Map resolution preferences to yt-dlp format selectors for video download
+        format_map = {
+            "144p": "best[height<=144]",
+            "240p": "best[height<=240]",
+            "360p": "best[height<=360]", 
+            "480p": "best[height<=480]",
+            "720p": "best[height<=720]",
+            "1080p": "best[height<=1080]",
+            "1440p": "best[height<=1440]",
+            "2160p": "best[height<=2160]",
+            "best": "best",
+            "worst": "worst"
         }
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            
-            formats = info.get('formats', [])
-            resolutions = set()
-            
-            for fmt in formats:
-                if fmt.get('height'):
-                    resolutions.add(f"{fmt['height']}p")
-            
-            # Sort resolutions
-            available_resolutions = sorted(list(resolutions), 
-                                         key=lambda x: int(x.replace('p', '')))
-            
-            return {
-                "available_resolutions": available_resolutions,
-                "recommended": "720p" if "720p" in available_resolutions else available_resolutions[-1] if available_resolutions else "best"
-            }
+        # Default to 720p if resolution not recognized
+        return format_map.get(resolution, format_map["720p"])
+    
+    def _save_project_metadata(self, project_dir: Path, project_id: str, url: str, resolution: str, video_file: str = "", thumbnail_file: str = "") -> None:
+        """Save project metadata to a JSON file"""
+        metadata = {
+            "project_id": project_id,
+            "youtube_url": url,
+            "resolution": resolution,
+            "created_at": datetime.now().isoformat(),
+            "video_file": video_file,
+            "thumbnail_file": thumbnail_file,
+        }
+        
+        # Save metadata to JSON file
+        metadata_path = project_dir / "metadata.json"
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2)
+        logger.info(f"Project metadata saved: {metadata_path}")
+
+
+    def _save_subtitles(self, project_dir: Path, subtitles: Dict[str, Any]) -> None:
+        """Save subtitles to a JSON file"""
+        # Save subtitles to JSON file
+        subtitles_path = project_dir / "subtitles.json"
+        with open(subtitles_path, 'w', encoding='utf-8') as f:
+            json.dump(subtitles, f, indent=2, ensure_ascii=False)
+        logger.info(f"Subtitles saved successfully: {subtitles_path}")
+
+
+    def extract_audio(self, video_path: str, project_id: str) -> str:
+        """Extract audio from YouTube video using MoviePy for better processing"""
+        project_dir = settings.get_project_dir(project_id)
+        output_path = project_dir / f"{project_id}_audio.wav"
+        
+        # Load video with MoviePy
+        video_clip = VideoFileClip(video_path)
+        
+        # Extract audio
+        audio_clip = video_clip.audio
+        
+        # Write audio to file with specific parameters for speech recognition
+        audio_clip.write_audiofile(
+            str(output_path),
+            fps=16000,  # 16kHz sample rate for speech recognition
+            nbytes=2,   # 16-bit audio
+            codec='pcm_s16le',  # WAV format
+            logger=None  # Suppress MoviePy logs
+        )
+        
+        # Clean up
+        audio_clip.close()
+        video_clip.close()
+        
+        if output_path.exists():
+            logger.info(f"Audio extracted successfully using MoviePy: {output_path}")
+            return str(output_path)
+        else:
+            raise Exception("Audio file not found after extraction")

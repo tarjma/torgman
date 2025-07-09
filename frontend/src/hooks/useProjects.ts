@@ -28,6 +28,14 @@ export const useProjects = (userId?: string) => {
         setError(null);
         const backendProjects = await projectService.listProjects();
         
+        // Ensure we have an array to work with
+        if (!Array.isArray(backendProjects)) {
+          console.error('Expected array of projects, got:', backendProjects);
+          setProjects([]);
+          setError('Invalid response format from server');
+          return;
+        }
+        
         // Transform backend data to frontend format
         const transformedProjects: Project[] = backendProjects.map(project => ({
           ...project,
@@ -43,6 +51,8 @@ export const useProjects = (userId?: string) => {
       } catch (err) {
         console.error('Failed to load projects:', err);
         setError(err instanceof Error ? err.message : 'Failed to load projects');
+        // Ensure projects is always an array
+        setProjects([]);
       } finally {
         setIsLoading(false);
       }
@@ -53,24 +63,42 @@ export const useProjects = (userId?: string) => {
 
   const createProject = useCallback(async (
     projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'userId'>,
-    resolution: string = '720p'
-  ) => {
-    if (!userId) return null;
+    resolution: string = '720p',
+    videoFile?: File,
+    preFetchedVideoInfo?: any // Add parameter for pre-fetched video info
+  ): Promise<Project | null> => {
+    console.log('createProject called', { projectData, resolution, videoFile: !!videoFile, userId });
+    
+    if (!userId) {
+      console.log('No userId, returning null');
+      return null;
+    }
 
     try {
-      // First get YouTube video info
+      // Create project ID
+      const projectId = 'project_' + Date.now();
+      console.log('Generated project ID:', projectId);
+
       if (projectData.videoUrl) {
-        const videoInfo = await youtubeService.getVideoInfo(projectData.videoUrl);
+        console.log('Handling YouTube video...');
+        // Handle YouTube video
+        let videoInfo;
         
-        // Create project ID
-        const projectId = 'project_' + Date.now();
+        if (preFetchedVideoInfo) {
+          console.log('Using pre-fetched video info, skipping API call');
+          videoInfo = preFetchedVideoInfo;
+        } else {
+          console.log('No pre-fetched info, calling getVideoInfo API');
+          videoInfo = await youtubeService.getVideoInfo(projectData.videoUrl);
+        }
         
         // Start processing the video with resolution
         await youtubeService.processVideo({
           url: projectData.videoUrl,
           project_id: projectId,
           language: projectData.language || 'ar',
-          resolution
+          resolution,
+          video_info: videoInfo // Pass pre-fetched video info
         });
 
         // Connect to WebSocket for real-time updates
@@ -91,15 +119,50 @@ export const useProjects = (userId?: string) => {
         const updatedProjects = [...projects, newProject];
         setProjects(updatedProjects);
         
-        return newProject;
+        // Return project but mark it as not ready for navigation
+        return { ...newProject, status: 'processing' };
+      } else if (videoFile) {
+        console.log('Handling file upload...');
+        // Handle file upload
+        await projectService.uploadProjectFile(
+          videoFile,
+          projectId,
+          projectData.title,
+          projectData.description,
+          projectData.language || 'ar'
+        );
+        
+        console.log('File uploaded successfully');
+        
+        // Connect to WebSocket for real-time updates
+        await webSocketService.connect(projectId);
+        
+        console.log('WebSocket connected');
+        
+        const newProject: Project = {
+          ...projectData,
+          id: projectId,
+          status: 'processing', // Set to processing since backend starts processing immediately
+          userId,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        const updatedProjects = [...projects, newProject];
+        setProjects(updatedProjects);
+        
+        console.log('Project added to state:', newProject);
+        
+        // Return project but mark it as not ready for navigation
+        return { ...newProject, status: 'processing' };
+      } else {
+        throw new Error('Either video URL or video file must be provided');
       }
     } catch (error) {
       console.error('Failed to create project:', error);
       setError(error instanceof Error ? error.message : 'Failed to create project');
       return null;
     }
-    
-    return null;
   }, [projects, userId]);
 
   const updateProject = useCallback(async (id: string, updates: Partial<Project>) => {
@@ -122,6 +185,17 @@ export const useProjects = (userId?: string) => {
     }
   }, [projects]);
 
+  // Real-time project status updates via WebSocket
+  const updateProjectFromWebSocket = useCallback((projectId: string, updates: Partial<Project>) => {
+    setProjects(prevProjects => 
+      prevProjects.map(project =>
+        project.id === projectId
+          ? { ...project, ...updates, updatedAt: new Date() }
+          : project
+      )
+    );
+  }, []);
+
   const deleteProject = useCallback(async (id: string) => {
     try {
       await projectService.deleteProject(id);
@@ -143,6 +217,7 @@ export const useProjects = (userId?: string) => {
     error,
     createProject,
     updateProject,
+    updateProjectFromWebSocket,
     deleteProject,
     getProject
   };

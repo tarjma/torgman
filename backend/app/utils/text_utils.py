@@ -1,5 +1,5 @@
 import datetime
-from typing import List, Dict, Any
+from typing import List, Dict
 
 def format_duration(duration_seconds):
     """Format duration in seconds to HH:MM:SS.sss format"""

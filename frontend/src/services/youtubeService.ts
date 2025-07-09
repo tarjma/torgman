@@ -17,6 +17,7 @@ export interface ProcessYouTubeRequest {
   project_id: string;
   language: string;
   resolution?: string;
+  video_info?: YouTubeVideoInfo; // Optional field to pass pre-fetched video info
 }
 
 export const youtubeService = {
@@ -31,6 +32,7 @@ export const youtubeService = {
     project_id: string;
     status: string;
     message: string;
+
   }> {
     const response = await apiClient.post(API_CONFIG.ENDPOINTS.YOUTUBE_PROCESS, request);
     return response.data;

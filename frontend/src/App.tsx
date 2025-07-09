@@ -9,11 +9,15 @@ import VideoPlayer from './components/VideoPlayer';
 import IntegratedSubtitlePanel from './components/IntegratedSubtitlePanel';
 
 // Hooks
-import { useAuth } from './hooks/useAuth';
 import { useProjects } from './hooks/useProjects';
 import { useSubtitles } from './hooks/useSubtitles';
 import { useVideoProcessor } from './hooks/useVideoProcessor';
 import { useAITranslation } from './hooks/useAITranslation';
+import { useProjectStatusUpdates } from './hooks/useProjectStatusUpdates';
+import { useProjectSubtitleUpdates } from './hooks/useProjectSubtitleUpdates';
+
+// Services
+import { projectService } from './services/projectService';
 
 // Types
 import { Project } from './types';
@@ -22,20 +26,29 @@ type AppMode = 'home' | 'editor';
 
 function App() {
   const [appMode, setAppMode] = useState<AppMode>('home');
-  const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
 
-  // Authentication
-  const { user, isLoading: authLoading } = useAuth();
-
-  // Projects management
+  // Projects management - using a default user ID for local usage
+  const defaultUserId = 'local-user';
   const { 
     projects, 
     createProject, 
+    updateProjectFromWebSocket,
     deleteProject 
-  } = useProjects(user?.id);
+  } = useProjects(defaultUserId);
+
+  // Set up real-time project status updates
+  useProjectStatusUpdates(projects, updateProjectFromWebSocket);
+
+  // Set up real-time subtitle updates for the current project
+  useProjectSubtitleUpdates(currentProjectId, (subtitles) => {
+    console.log('Received subtitle update:', subtitles);
+    loadSubtitles(subtitles);
+  });
 
   // Editor hooks (only used in editor mode)
   const {
@@ -47,17 +60,21 @@ function App() {
     addSubtitle,
     updateSubtitle,
     deleteSubtitle,
-    duplicateSubtitle
+    duplicateSubtitle,
+    loadSubtitles,
+    clearSubtitles,
+    // Navigation functions
+    findNextSubtitle,
+    findPreviousSubtitle,
+    seekToSubtitle,
+    getSubtitleByTime,
+    updateActiveSubtitleByTime
   } = useSubtitles();
 
   const {
     videoInfo,
-    isProcessing,
     progress,
-    processVideoFile,
-    processYouTubeUrl,
-    setVideoInfo,
-    extractYouTubeTitle
+    setVideoInfo
   } = useVideoProcessor();
 
   const {
@@ -97,40 +114,126 @@ function App() {
     projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'userId'>, 
     videoFile?: File, 
     youtubeUrl?: string,
-    resolution?: string
+    resolution?: string,
+    videoInfo?: any // Add videoInfo parameter
   ) => {
+    console.log('handleCreateProject called', { projectData, videoFile, youtubeUrl, resolution });
+    
+    setIsCreatingProject(true);
+    
     try {
-      // Process video first
-      let videoProcessingResult = null;
+      let newProject = null;
+      
       if (videoFile) {
-        videoProcessingResult = await processVideoFile(videoFile);
+        console.log('Processing file upload...');
+        // For file uploads, create project but don't navigate immediately
+        newProject = await createProject({
+          ...projectData,
+          duration: 0 // Will be updated when backend processing completes
+        }, resolution || '720p', videoFile);
+        
+        console.log('Project created:', newProject);
+        
+        if (newProject) {
+          // Close modal after successful creation
+          setShowCreateModal(false);
+          console.log('File upload started, staying on home page until completion');
+        }
       } else if (youtubeUrl) {
-        videoProcessingResult = await processYouTubeUrl(youtubeUrl);
-      }
+        console.log('Processing YouTube URL...');
+        // For YouTube URLs, create project but don't navigate immediately
+        // Use video info from modal instead of calling processYouTubeUrl
+        newProject = await createProject({
+          ...projectData,
+          duration: videoInfo?.duration || 0 // Use duration from pre-fetched info
+        }, resolution || '720p', undefined, videoInfo); // Pass videoInfo as 4th parameter
 
-      // Create project with video info and resolution
-      const newProject = await createProject({
-        ...projectData,
-        duration: videoProcessingResult?.duration || 0
-      }, resolution || '720p');
-
-      if (newProject) {
-        setCurrentProject(newProject);
-        setShowCreateModal(false);
-        setAppMode('editor');
+        if (newProject) {
+          // Close modal after successful creation
+          setShowCreateModal(false);
+          console.log('YouTube project created, staying on home page until completion');
+        }
+      } else {
+        throw new Error('Either video file or YouTube URL must be provided');
       }
     } catch (error) {
       console.error('Project creation failed:', error);
-      alert('فشل في إنشاء المشروع');
+      alert(`فشل في إنشاء المشروع: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`);
+    } finally {
+      setIsCreatingProject(false);
     }
-  }, [createProject, processVideoFile, processYouTubeUrl]);
+  }, [createProject]);
 
-  const handleOpenProject = useCallback((project: Project) => {
-    setCurrentProject(project);
-    // Reset video info when opening existing project
-    setVideoInfo(null);
-    setAppMode('editor');
-  }, [setVideoInfo]);
+  const handleOpenProject = useCallback(async (project: Project) => {
+    console.log('Opening project:', project);
+    // Only navigate to editor if project is completed
+    if (project.status === 'completed') {
+      try {
+        // Load subtitles from backend
+        console.log('Loading subtitles for project:', project.id);
+        const backendSubtitles = await projectService.getProjectSubtitles(project.id);
+        console.log('Backend subtitles received:', backendSubtitles);
+        
+        // Convert backend subtitles to frontend format
+        const frontendSubtitles = backendSubtitles.map((sub, index) => ({
+          id: `${project.id}-${index}`, // Generate unique ID
+          start_time: sub.start,
+          end_time: sub.end,
+          text: sub.text,
+          originalText: sub.text,
+          translatedText: '',
+          position: { x: 50, y: 80 },
+          styling: {
+            fontFamily: 'Noto Sans Arabic, Arial, sans-serif',
+            fontSize: 20,
+            color: '#ffffff',
+            backgroundColor: '#000000',
+            opacity: 1,
+            outline: true,
+            outlineColor: '#000000',
+            bold: false,
+            italic: false,
+            alignment: 'center' as const
+          }
+        }));
+        
+        console.log('Frontend subtitles converted:', frontendSubtitles);
+        
+        // Load subtitles using the bulk load method
+        loadSubtitles(frontendSubtitles);
+        
+        // Set the current project ID for real-time updates
+        setCurrentProjectId(project.id);
+        
+        // For completed projects, load the appropriate video source
+        if (project.videoUrl) {
+          // YouTube video - load the downloaded video file from server
+          const videoUrl = await projectService.getProjectVideo(project.id);
+          setVideoInfo({
+            url: videoUrl,
+            duration: project.duration,
+            title: project.videoTitle,
+            language: project.language || 'ar'
+          });
+        } else if (project.videoFile) {
+          // File upload - this would need to be handled differently
+          // For now, we'll just set the basic info
+          setVideoInfo({
+            title: project.videoTitle,
+            duration: project.duration,
+            language: project.language || 'ar'
+          });
+        }
+        setAppMode('editor');
+      } catch (error) {
+        console.error('Error loading project video:', error);
+        alert('فشل في تحميل الفيديو. يرجى المحاولة مرة أخرى.');
+      }
+    } else {
+      // For processing projects, show processing status
+      alert(`المشروع لا يزال قيد المعالجة. الحالة: ${project.status}`);
+    }
+  }, [setVideoInfo, loadSubtitles, projectService]);
 
   const handleDeleteProject = useCallback((id: string) => {
     if (confirm('هل أنت متأكد من حذف هذا المشروع؟')) {
@@ -140,9 +243,10 @@ function App() {
 
   const handleBackToHome = useCallback(() => {
     setAppMode('home');
-    setCurrentProject(null);
     setVideoInfo(null);
-  }, [setVideoInfo]);
+    clearSubtitles();
+    setCurrentProjectId(null);
+  }, [setVideoInfo, clearSubtitles]);
 
   const handleTranslateText = useCallback(async (text: string) => {
     try {
@@ -161,31 +265,38 @@ function App() {
     setActiveSubtitle(subtitleId);
   }, [setCurrentTime, setActiveSubtitle]);
 
-  // Loading state
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
-            <Languages className="w-8 h-8 text-white" />
-          </div>
-          <p className="text-gray-600">جاري التحميل...</p>
-        </div>
-      </div>
-    );
-  }
+  // Auto-update active subtitle based on current time
+  const handleTimeUpdate = useCallback((time: number) => {
+    setCurrentTime(time);
+    // Update active subtitle automatically
+    const currentSub = getSubtitleByTime(time);
+    if (currentSub && currentSub.id !== activeSubtitle) {
+      setActiveSubtitle(currentSub.id);
+    } else if (!currentSub && activeSubtitle) {
+      setActiveSubtitle(null);
+    }
+  }, [setCurrentTime, getSubtitleByTime, activeSubtitle, setActiveSubtitle]);
 
-  // Skip sign in page - go directly to home
-  // if (!user) {
-  //   return <SignInPage onSignIn={signInWithGoogle} isLoading={authLoading} />;
-  // }
+  // Keyboard shortcuts for navigation
+  useHotkeys('left', () => {
+    const prevSub = findPreviousSubtitle();
+    if (prevSub) {
+      seekToSubtitle(prevSub.id);
+    }
+  }, [findPreviousSubtitle, seekToSubtitle]);
+
+  useHotkeys('right', () => {
+    const nextSub = findNextSubtitle();
+    if (nextSub) {
+      seekToSubtitle(nextSub.id);
+    }
+  }, [findNextSubtitle, seekToSubtitle]);
 
   // Home page
   if (appMode === 'home') {
     return (
       <>
         <HomePage
-          user={user}
           projects={projects}
           onCreateProject={() => setShowCreateModal(true)}
           onOpenProject={handleOpenProject}
@@ -196,9 +307,8 @@ function App() {
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
           onCreateProject={handleCreateProject}
-          isProcessing={isProcessing}
+          isProcessing={isCreatingProject}
           progress={progress}
-          extractYouTubeTitle={extractYouTubeTitle}
         />
       </>
     );
@@ -233,21 +343,10 @@ function App() {
   // Editor mode with video loaded
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 relative" dir="rtl">
+      
       <div className="max-w-full mx-auto px-4 lg:px-6 py-6">
         {/* Main Interface - Video takes most space */}
         <div className="flex gap-4 h-[calc(100vh-6rem)]">
-          {/* Video Player - Takes most of the screen */}
-          <div className="flex-1 bg-black rounded-2xl overflow-hidden shadow-strong">
-            <VideoPlayer
-              videoFile={videoInfo.file}
-              videoSrc={videoInfo.url}
-              subtitles={subtitles}
-              currentTime={currentTime}
-              onTimeUpdate={setCurrentTime}
-              onDurationChange={(duration) => console.log('Duration:', duration)}
-            />
-          </div>
-
           {/* Subtitle Editor - Compact side panel */}
           <div className="w-96 bg-white rounded-2xl shadow-strong overflow-hidden">
             <IntegratedSubtitlePanel
@@ -255,8 +354,14 @@ function App() {
               activeSubtitle={activeSubtitle}
               currentTime={currentTime}
               videoTitle={videoInfo.title}
-              onAddSubtitle={addSubtitle}
-              onUpdateSubtitle={updateSubtitle}
+              onAddSubtitle={(startTime, endTime) => {
+                console.log('Adding subtitle:', { startTime, endTime });
+                return addSubtitle(startTime, endTime);
+              }}
+              onUpdateSubtitle={(id, updates) => {
+                console.log('Updating subtitle:', { id, updates });
+                updateSubtitle(id, updates);
+              }}
               onDeleteSubtitle={deleteSubtitle}
               onSelectSubtitle={setActiveSubtitle}
               onDuplicateSubtitle={duplicateSubtitle}
@@ -264,6 +369,18 @@ function App() {
               onSeekToSubtitle={handleSeekToSubtitle}
               isTranslating={isTranslating}
               isAutoSaving={isAutoSaving}
+            />
+          </div>
+
+          {/* Video Player - Takes most of the screen */}
+          <div className="flex-1 bg-black rounded-2xl overflow-hidden shadow-strong">
+            <VideoPlayer
+              videoFile={videoInfo.file}
+              videoSrc={videoInfo.url}
+              subtitles={subtitles}
+              currentTime={currentTime}
+              onTimeUpdate={handleTimeUpdate}
+              onDurationChange={(duration) => console.log('Duration:', duration)}
             />
           </div>
         </div>

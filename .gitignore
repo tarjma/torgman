@@ -204,3 +204,5 @@ dist-ssr
 
 # Audio files
 *.mp3
+
+data/

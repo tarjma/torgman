@@ -7,8 +7,11 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = False
     
+    # Data directory - centralized location for all persistent data
+    data_dir: Path = Path("/app/data")
+    
     # Database settings
-    database_path: Path = Path("/app/data/torgman.db")
+    database_path: Path = data_dir / "torgman.db"
     
     # CORS settings
     cors_origins: list = ["*"]
@@ -17,8 +20,15 @@ class Settings(BaseSettings):
     cors_headers: list = ["*"]
     
     # File storage settings
-    temp_dir: Path = Path("/tmp/torgman")
+    projects_dir: Path = data_dir / "projects"  # Each project gets its own folder
+    config_dir: Path = data_dir / "config"  # Application configuration files
     static_dir: Path = Path("static")
+    
+    def get_project_dir(self, project_id: str) -> Path:
+        """Get the directory path for a specific project"""
+        project_dir = self.projects_dir / project_id
+        project_dir.mkdir(parents=True, exist_ok=True)
+        return project_dir
     
     # API settings
     api_prefix: str = "/api"
@@ -33,7 +43,9 @@ class Settings(BaseSettings):
 # Create settings instance
 settings = Settings()
 
-# Ensure directories exist
+# Ensure all data directories exist
+settings.data_dir.mkdir(parents=True, exist_ok=True)
 settings.database_path.parent.mkdir(parents=True, exist_ok=True)
-settings.temp_dir.mkdir(parents=True, exist_ok=True)
+settings.projects_dir.mkdir(parents=True, exist_ok=True)
+settings.config_dir.mkdir(parents=True, exist_ok=True)
 settings.static_dir.mkdir(parents=True, exist_ok=True)

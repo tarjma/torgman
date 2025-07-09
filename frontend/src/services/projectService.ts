@@ -14,15 +14,12 @@ export interface ProjectData {
   updated_at?: string;
 }
 
-export interface SubtitleData {
-  id: string;
-  project_id: string;
-  start_time: number;
-  end_time: number;
+export interface CaptionData {
+  start: number;
+  end: number;
   text: string;
-  speaker_id?: string;
   confidence?: number;
-  created_at?: string;
+  language?: string;
 }
 
 export const projectService = {
@@ -38,7 +35,7 @@ export const projectService = {
     return response.data;
   },
 
-  async getProjectSubtitles(projectId: string): Promise<SubtitleData[]> {
+  async getProjectSubtitles(projectId: string): Promise<CaptionData[]> {
     const response = await apiClient.get(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/subtitles`);
     return response.data;
   },
@@ -55,5 +52,64 @@ export const projectService = {
     }
     
     await apiClient.put(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/status?${params.toString()}`);
-  }
+  },
+
+  async uploadProjectFile(
+    file: File,
+    projectId: string, 
+    title: string,
+    description?: string,
+    language: string = 'ar'
+  ): Promise<{
+    project_id: string;
+    status: string;
+    message: string;
+  }> {
+    console.log('uploadProjectFile called', { fileName: file.name, projectId, title, description, language });
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('project_id', projectId);
+    formData.append('title', title);
+    if (description) {
+      formData.append('description', description);
+    }
+    formData.append('language', language);
+
+    console.log('Making API call to upload endpoint...');
+    
+    const response = await apiClient.post(API_CONFIG.ENDPOINTS.PROJECTS_UPLOAD, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    
+    console.log('Upload response:', response.data);
+    return response.data;
+  },
+
+  async getProjectThumbnail(projectId: string): Promise<string> {
+    try {
+      const response = await apiClient.get(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/thumbnail`, {
+        responseType: 'blob',
+      });
+      
+      // Create a URL for the blob
+      const blob = new Blob([response.data]);
+      return URL.createObjectURL(blob);
+    } catch (error) {
+      console.error('Error fetching project thumbnail:', error);
+      return '';
+    }
+  },
+
+  async getProjectVideo(projectId: string): Promise<string> {
+    try {
+      // Return the API endpoint URL for the video
+      return `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/video`;
+    } catch (error) {
+      console.error('Error getting project video URL:', error);
+      return '';
+    }
+  },
 };

@@ -11,9 +11,9 @@ export const exportSubtitles = (subtitles: Subtitle[], options: ExportOptions): 
 const exportToSRT = (subtitles: Subtitle[]): string => {
   return subtitles
     .map((subtitle, index) => {
-      const startTime = formatSRTTime(subtitle.startTime);
-      const endTime = formatSRTTime(subtitle.endTime);
-      const text = subtitle.translatedText || subtitle.originalText;
+      const startTime = formatSRTTime(subtitle.start_time);
+      const endTime = formatSRTTime(subtitle.end_time);
+      const text = subtitle.translatedText || subtitle.text || subtitle.originalText || '';
       
       return `${index + 1}\n${startTime} --> ${endTime}\n${text}\n`;
     })
@@ -29,9 +29,9 @@ const exportToVTT = (subtitles: Subtitle[], includeStyles: boolean): string => {
   
   vtt += subtitles
     .map(subtitle => {
-      const startTime = formatVTTTime(subtitle.startTime);
-      const endTime = formatVTTTime(subtitle.endTime);
-      const text = subtitle.translatedText || subtitle.originalText;
+      const startTime = formatVTTTime(subtitle.start_time);
+      const endTime = formatVTTTime(subtitle.end_time);
+      const text = subtitle.translatedText || subtitle.text || subtitle.originalText || '';
       
       let cueSettings = '';
       if (includeStyles) {
@@ -77,7 +77,10 @@ export const downloadFile = (content: string, filename: string, mimeType: string
 };
 
 export const formatTime = (seconds: number): string => {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60);
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 1000);
+  
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
 };

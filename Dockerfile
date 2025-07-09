@@ -1,6 +1,6 @@
 # Multi-stage build for single container deployment
 # Stage 1: Build React frontend
-FROM node:18-alpine as frontend-build
+FROM node:18-alpine AS frontend-build
 
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
@@ -29,22 +29,14 @@ WORKDIR /app
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install additional dependencies for AI processing
-RUN pip install --no-cache-dir \
-    ollama \
-    pyannote.audio \
-    torch \
-    torchaudio \
-    sqlalchemy
-
 # Copy backend code
 COPY backend/app ./app
 
 # Copy built frontend from stage 1
 COPY --from=frontend-build /app/frontend/dist ./static
 
-# Create data directory for SQLite and user projects
-RUN mkdir -p /app/data
+# Create organized data directory structure for persistence
+RUN mkdir -p /app/data/{projects,config}
 
 # Expose port
 EXPOSE 8000

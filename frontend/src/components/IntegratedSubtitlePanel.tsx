@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { Plus, Edit3, Trash2, Copy, Wand2, Clock, Download, Settings, Save, FileText, Play } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Plus, Edit3, Trash2, Copy, Wand2, Clock, Download, Settings, Save, FileText, ChevronUp, ChevronDown } from 'lucide-react';
 import { Subtitle, ExportOptions } from '../types';
 import { formatTime, exportSubtitles, downloadFile } from '../utils/exportUtils';
 
@@ -36,13 +36,15 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
   onAddSubtitle,
   onUpdateSubtitle,
   onDeleteSubtitle,
-  onSelectSubtitle,
   onDuplicateSubtitle,
   onTranslateText,
   onSeekToSubtitle,
   isTranslating,
   isAutoSaving
 }) => {
+  console.log('IntegratedSubtitlePanel received subtitles:', subtitles);
+  console.log('Subtitles count:', subtitles.length);
+  
   const [expandedSubtitle, setExpandedSubtitle] = useState<string | null>(null);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
@@ -51,6 +53,32 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
     encoding: 'utf-8'
   });
 
+  // Ref for auto-scrolling to active subtitle
+  const activeSubtitleRef = useRef<HTMLDivElement>(null);
+  const subtitleListRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to active subtitle
+  useEffect(() => {
+    if (activeSubtitle && activeSubtitleRef.current && subtitleListRef.current) {
+      const activeElement = activeSubtitleRef.current;
+      const container = subtitleListRef.current;
+      
+      // Calculate if element is in view
+      const elementTop = activeElement.offsetTop;
+      const elementBottom = elementTop + activeElement.offsetHeight;
+      const containerTop = container.scrollTop;
+      const containerBottom = containerTop + container.offsetHeight;
+      
+      // Scroll to element if it's not fully visible
+      if (elementTop < containerTop || elementBottom > containerBottom) {
+        activeElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+      }
+    }
+  }, [activeSubtitle]);
+
   const handleAddSubtitle = useCallback(() => {
     const startTime = Math.floor(currentTime);
     const endTime = startTime + 3;
@@ -58,10 +86,15 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
   }, [currentTime, onAddSubtitle]);
 
   const handleTextChange = useCallback((id: string, field: 'originalText' | 'translatedText', value: string) => {
-    onUpdateSubtitle(id, { [field]: value });
+    // Update both the specific field and the main text field if it's originalText
+    const updates: Partial<Subtitle> = { [field]: value };
+    if (field === 'originalText') {
+      updates.text = value; // Keep text field in sync with originalText
+    }
+    onUpdateSubtitle(id, updates);
   }, [onUpdateSubtitle]);
 
-  const handleTimeChange = useCallback((id: string, field: 'startTime' | 'endTime', value: string) => {
+  const handleTimeChange = useCallback((id: string, field: 'start_time' | 'end_time', value: string) => {
     const timeValue = parseFloat(value);
     if (!isNaN(timeValue)) {
       onUpdateSubtitle(id, { [field]: timeValue });
@@ -81,8 +114,8 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
   }, [subtitles, onUpdateSubtitle]);
 
   const handleAutoTranslate = useCallback(async (subtitle: Subtitle) => {
-    if (subtitle.originalText) {
-      await onTranslateText(subtitle.originalText);
+    if (subtitle.text || subtitle.originalText) {
+      await onTranslateText(subtitle.text || subtitle.originalText || '');
     }
   }, [onTranslateText]);
 
@@ -104,6 +137,25 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
     setExpandedSubtitle(expandedSubtitle === id ? null : id);
   }, [expandedSubtitle]);
 
+  // Navigation functions
+  const handleNavigateToNext = useCallback(() => {
+    const currentIndex = subtitles.findIndex(sub => sub.id === activeSubtitle);
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < subtitles.length) {
+      const nextSubtitle = subtitles[nextIndex];
+      onSeekToSubtitle(nextSubtitle.start_time, nextSubtitle.id);
+    }
+  }, [subtitles, activeSubtitle, onSeekToSubtitle]);
+
+  const handleNavigateToPrevious = useCallback(() => {
+    const currentIndex = subtitles.findIndex(sub => sub.id === activeSubtitle);
+    const prevIndex = currentIndex - 1;
+    if (prevIndex >= 0) {
+      const prevSubtitle = subtitles[prevIndex];
+      onSeekToSubtitle(prevSubtitle.start_time, prevSubtitle.id);
+    }
+  }, [subtitles, activeSubtitle, onSeekToSubtitle]);
+
   return (
     <div className="h-full flex flex-col bg-white rounded-lg overflow-hidden border">
       {/* Header */}
@@ -116,6 +168,27 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Navigation Controls */}
+            <div className="flex items-center gap-1 border-r border-blue-500 pr-2 ml-2">
+              <button
+                onClick={handleNavigateToPrevious}
+                disabled={!activeSubtitle || subtitles.findIndex(sub => sub.id === activeSubtitle) === 0}
+                className="p-1 hover:bg-blue-500 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="الترجمة السابقة"
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleNavigateToNext}
+                disabled={!activeSubtitle || subtitles.findIndex(sub => sub.id === activeSubtitle) === subtitles.length - 1}
+                className="p-1 hover:bg-blue-500 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="الترجمة التالية"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+            
+            {/* Existing controls */}
             {isAutoSaving && (
               <div className="flex items-center gap-1 text-xs bg-blue-500 px-2 py-1 rounded">
                 <Save className="w-3 h-3" />
@@ -187,7 +260,10 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
       </div>
 
       {/* Subtitles List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div 
+        ref={subtitleListRef}
+        className="flex-1 overflow-y-auto p-4 space-y-3"
+      >
         {subtitles.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -207,22 +283,33 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
           subtitles.map((subtitle) => (
             <div
               key={subtitle.id}
-              className={`border rounded-lg overflow-hidden transition-all ${
+              ref={activeSubtitle === subtitle.id ? activeSubtitleRef : null}
+              className={`border rounded-lg overflow-hidden transition-all duration-200 ${
                 activeSubtitle === subtitle.id
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-gray-300'
+                  ? 'border-blue-500 bg-blue-50 shadow-md scale-[1.02]'
+                  : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
               }`}
             >
               {/* Subtitle Header */}
               <div 
-                className="p-3 cursor-pointer"
-                onClick={() => onSeekToSubtitle(subtitle.startTime, subtitle.id)}
+                className="p-3 cursor-pointer relative group"
+                onClick={() => onSeekToSubtitle(subtitle.start_time, subtitle.id)}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <button className="flex items-center gap-2 text-xs bg-gray-100 px-2 py-1 rounded font-mono">
-                    <Clock className="w-3 h-3" />
-                    {formatTime(subtitle.startTime)} - {formatTime(subtitle.endTime)}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button className="flex items-center gap-2 text-xs bg-gray-100 px-2 py-1 rounded font-mono">
+                      <Clock className="w-3 h-3" />
+                      {formatTime(subtitle.start_time)} - {formatTime(subtitle.end_time)}
+                    </button>
+                    
+                    {/* Current time indicator */}
+                    {currentTime >= subtitle.start_time && currentTime <= subtitle.end_time && (
+                      <div className="flex items-center gap-1 text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        مباشر
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1">
                     <button
@@ -271,10 +358,22 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
 
                 {/* Text Editing */}
                 <div className="space-y-2">
+                  {/* Subtitle Progress Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
+                    <div 
+                      className="bg-blue-500 h-1 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: `${Math.min(100, Math.max(0, 
+                          ((currentTime - subtitle.start_time) / (subtitle.end_time - subtitle.start_time)) * 100
+                        ))}%` 
+                      }}
+                    />
+                  </div>
+                  
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">النص الأصلي</label>
                     <textarea
-                      value={subtitle.originalText}
+                      value={subtitle.text || subtitle.originalText || ''}
                       onChange={(e) => handleTextChange(subtitle.id, 'originalText', e.target.value)}
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       rows={2}
@@ -311,8 +410,8 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
                         <input
                           type="number"
                           step="0.1"
-                          value={subtitle.startTime}
-                          onChange={(e) => handleTimeChange(subtitle.id, 'startTime', e.target.value)}
+                          value={subtitle.start_time}
+                          onChange={(e) => handleTimeChange(subtitle.id, 'start_time', e.target.value)}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -322,8 +421,8 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
                         <input
                           type="number"
                           step="0.1"
-                          value={subtitle.endTime}
-                          onChange={(e) => handleTimeChange(subtitle.id, 'endTime', e.target.value)}
+                          value={subtitle.end_time}
+                          onChange={(e) => handleTimeChange(subtitle.id, 'end_time', e.target.value)}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -452,7 +551,7 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
                           borderRadius: '4px'
                         }}
                       >
-                        {subtitle.translatedText || subtitle.originalText || 'معاينة النص'}
+                        {subtitle.translatedText || subtitle.text || subtitle.originalText || 'معاينة النص'}
                       </div>
                     </div>
                   </div>

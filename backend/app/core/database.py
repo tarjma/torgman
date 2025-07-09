@@ -1,11 +1,10 @@
 import aiosqlite
 from pathlib import Path
 from typing import List, Dict, Optional, Any
-from datetime import datetime
 import logging
-
+import json
 from .config import settings
-from ..models.project import ProjectData, SubtitleData
+from ..models.project import ProjectData, CaptionData
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +15,9 @@ class Database:
         self.db_path = db_path or settings.database_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
     
-    async def get_connection(self):
+    def get_connection(self):
         """Get async SQLite database connection"""
-        return await aiosqlite.connect(str(self.db_path))
+        return aiosqlite.connect(str(self.db_path))
     
     async def create_tables(self):
         """Initialize database with required tables"""
@@ -149,24 +148,23 @@ class Database:
             logger.error(f"Error saving subtitles: {e}")
             return False
     
-    async def get_project_subtitles(self, project_id: str) -> List[SubtitleData]:
+    def get_project_subtitles(self, project_id: str) -> List[CaptionData]:
         """Get subtitles for a project"""
-        try:
-            async with self.get_connection() as db:
-                async with db.execute(
-                    "SELECT * FROM subtitles WHERE project_id = ? ORDER BY start_time",
-                    (project_id,)
-                ) as cursor:
-                    rows = await cursor.fetchall()
-                    columns = [description[0] for description in cursor.description]
-                    return [
-                        SubtitleData(**dict(zip(columns, row)))
-                        for row in rows
-                    ]
-        except Exception as e:
-            logger.error(f"Error getting subtitles for project {project_id}: {e}")
-            return []
-    
+        project_dir = settings.get_project_dir(project_id)
+        subtitles_path = project_dir / "subtitles.json"
+        with open(subtitles_path, 'r', encoding='utf-8') as f:
+            subtitles_data = json.load(f)
+        subtitles = []
+        for subtitle in subtitles_data:
+            subtitles.append(CaptionData(
+                start=subtitle["start"],
+                end=subtitle["end"],
+                text=subtitle["text"],
+                confidence=subtitle["confidence"],
+                language=subtitle["language"]
+            ))
+        return subtitles
+
     async def list_projects(self, limit: int = 50, offset: int = 0) -> List[ProjectData]:
         """List all projects with pagination"""
         try:
@@ -186,7 +184,7 @@ class Database:
             return []
     
     async def delete_project(self, project_id: str) -> bool:
-        """Delete a project and its subtitles"""
+        """Delete a project, its subtitles, and associated files"""
         try:
             async with self.get_connection() as db:
                 # Delete subtitles first (foreign key constraint)
@@ -194,11 +192,27 @@ class Database:
                 # Delete project
                 await db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
                 await db.commit()
-                logger.info(f"Project {project_id} deleted successfully")
+                logger.info(f"Project {project_id} deleted successfully from database")
+                
+                # Clean up project directory and files
+                self._cleanup_project_files(project_id)
+                
                 return True
         except Exception as e:
             logger.error(f"Error deleting project {project_id}: {e}")
             return False
+    
+    def _cleanup_project_files(self, project_id: str) -> None:
+        """Clean up all files associated with a project"""
+        try:
+            import shutil
+            project_dir = settings.get_project_dir(project_id)
+            
+            if project_dir.exists():
+                shutil.rmtree(project_dir)
+                logger.info(f"Project files cleaned up: {project_dir}")
+        except Exception as e:
+            logger.error(f"Error cleaning up project files for {project_id}: {e}")
 
 # Global database instance
 _database = None

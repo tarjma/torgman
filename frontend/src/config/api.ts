@@ -6,6 +6,7 @@ export const API_CONFIG = {
     YOUTUBE_INFO: '/api/youtube/info',
     YOUTUBE_PROCESS: '/api/youtube/process', 
     PROJECTS: '/api/projects',
+    PROJECTS_UPLOAD: '/api/projects/upload',
     WEBSOCKET: '/ws'
   }
 } as const;

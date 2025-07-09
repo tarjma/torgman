@@ -121,9 +121,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setShowSettings(false);
   }, []);
 
-  // Get current subtitle
+  // Get current subtitle (fixed property names)
   const currentSubtitle = subtitles.find(sub => 
-    currentTime >= sub.startTime && currentTime <= sub.endTime
+    currentTime >= sub.start_time && currentTime <= sub.end_time
   );
 
   const toggleFullscreen = useCallback(() => {
@@ -135,6 +135,57 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       }
     }
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Only handle shortcuts if video is focused or if no input is focused
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          skipTime(-5);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          skipTime(5);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          handleVolumeChange(Math.min(1, volume + 0.1));
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          handleVolumeChange(Math.max(0, volume - 0.1));
+          break;
+        case 'm':
+        case 'M':
+          e.preventDefault();
+          toggleMute();
+          break;
+        case 's':
+        case 'S':
+          e.preventDefault();
+          setShowSubtitles(!showSubtitles);
+          break;
+        case 'f':
+        case 'F':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, [togglePlay, skipTime, handleVolumeChange, volume, toggleMute, showSubtitles, toggleFullscreen]);
 
   return (
     <div className="bg-black h-full flex flex-col rounded-lg overflow-hidden">
@@ -152,7 +203,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         {/* Subtitle Overlay */}
         {showSubtitles && currentSubtitle && (
           <div 
-            className="absolute bottom-16 left-1/2 transform -translate-x-1/2 px-4 py-2 text-center max-w-[80%]"
+            className="absolute bottom-16 left-1/2 transform -translate-x-1/2 px-4 py-2 text-center max-w-[80%] transition-opacity duration-300"
             style={{
               fontFamily: currentSubtitle.styling.fontFamily,
               fontSize: `${Math.max(currentSubtitle.styling.fontSize, 16)}px`,
@@ -164,10 +215,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 ? `2px 2px 0 ${currentSubtitle.styling.outlineColor}, -2px -2px 0 ${currentSubtitle.styling.outlineColor}, 2px -2px 0 ${currentSubtitle.styling.outlineColor}, -2px 2px 0 ${currentSubtitle.styling.outlineColor}` 
                 : '1px 1px 2px rgba(0,0,0,0.8)',
               direction: 'rtl',
-              borderRadius: '4px'
+              borderRadius: '4px',
+              opacity: currentSubtitle.styling.opacity || 1,
+              top: `${currentSubtitle.position.y}%`,
+              left: `${currentSubtitle.position.x}%`,
+              transform: 'translate(-50%, -50%)',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.4
             }}
           >
-            {currentSubtitle.translatedText || currentSubtitle.originalText}
+            {currentSubtitle.translatedText || currentSubtitle.text || currentSubtitle.originalText}
           </div>
         )}
 
@@ -286,11 +343,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             {/* Subtitle Toggle */}
             <button
               onClick={() => setShowSubtitles(!showSubtitles)}
-              className={`p-2 rounded transition-colors ${
+              className={`p-2 rounded transition-colors relative ${
                 showSubtitles ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'
               }`}
+              title={`${showSubtitles ? 'إخفاء' : 'إظهار'} الترجمات (${subtitles.length})`}
             >
               <Subtitles className="w-5 h-5" />
+              {subtitles.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {subtitles.length}
+                </span>
+              )}
             </button>
             
             <button

@@ -13,6 +13,8 @@ class SubtitleGenerator:
     """Generate subtitles using Whisper ASR with audio segmentation"""
     
     def __init__(self):
+        # Load the segmentation model from Hugging Face
+        logger.info("Loading segmentation model")
         segmentation_model = Model.from_pretrained(
             "pyannote/segmentation",
             use_auth_token=os.getenv("HF_TOKEN")
@@ -24,19 +26,24 @@ class SubtitleGenerator:
             "min_duration_off": 0.4 # fill non-speech regions shorter than that many seconds.
         }
         self.segmentation_pipeline.instantiate(HYPER_PARAMETERS)
+
+        # Load the Whisper model
+        logger.info("Loading Whisper model")
         self.whisper_model = whisper.load_model("turbo")
     
     def generate_transcription(self, audio_path: str) -> List[Dict[str, Any]]:
         """Segment audio into manageable chunks for Whisper processing"""
         # Load the entire audio file
+        logger.info(f"Loading audio file: {audio_path}")
         audio, sr = librosa.load(audio_path, sr=16000, mono=True)
+        logger.info(f"Audio loaded with sample rate: {sr} Hz, duration: {len(audio)/sr:.2f} seconds")
         
         # Use pyannote segmentation to find natural breaks in audio
         speech_segments = self.segmentation_pipeline(audio_path)
+        logger.info(f"Detected {len(speech_segments)} speech segments")
         
         # Convert segmentation to manageable chunks
         segments = []
-        
         for segment in speech_segments.itersegments():
             start_time = segment.start
             end_time = segment.end
@@ -56,7 +63,9 @@ class SubtitleGenerator:
             # Transcribe the audio chunk with Whisper
             # Use fp16=False if you are running on CPU
             result = self.whisper_model.transcribe(segment_audio)
+            logger.info(result)
             transcribed_text = result['text'].strip()
+            logger.info(f"Transcribed segment from {start_time:.2f}s to {end_time:.2f}s: {transcribed_text}")
         
             segments.append({
                 "start": start_time,
@@ -68,8 +77,3 @@ class SubtitleGenerator:
         
         logger.info(f"Created {len(segments)} audio segments")
         return segments
-
-    async def initialize_models(self):
-        """Compatibility method - models are already loaded in __init__"""
-        logger.info("Models already initialized during service creation")
-        return True

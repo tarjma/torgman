@@ -1,15 +1,15 @@
 from .project import (
     YouTubeProcessRequest,
-    SubtitleSegment,
+    FileUploadRequest,
     ProjectResponse,
     ProjectData,
-    SubtitleData
+    CaptionData
 )
 
 __all__ = [
     "YouTubeProcessRequest",
-    "SubtitleSegment", 
+    "FileUploadRequest",
     "ProjectResponse",
     "ProjectData",
-    "SubtitleData"
+    "CaptionData"
 ]

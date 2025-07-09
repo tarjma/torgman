@@ -1,19 +1,16 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
 
 class YouTubeProcessRequest(BaseModel):
     url: str
     project_id: str
-    language: str = "ar"
     resolution: str = "720p"  # Options: "144p", "240p", "360p", "480p", "720p", "1080p", "best", "worst"
+    video_info: Optional[dict] = None  # Optional field to pass pre-fetched video info
 
-class SubtitleSegment(BaseModel):
-    id: str
-    start_time: float
-    end_time: float
-    text: str
-    confidence: Optional[float] = None
+class FileUploadRequest(BaseModel):
+    project_id: str
+    title: str
 
 class ProjectResponse(BaseModel):
     id: str
@@ -35,12 +32,9 @@ class ProjectData(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-class SubtitleData(BaseModel):
-    id: str
-    project_id: str
-    start_time: float
-    end_time: float
+class CaptionData(BaseModel):
+    start: float
+    end: float
     text: str
-    speaker_id: Optional[str] = None
     confidence: Optional[float] = None
-    created_at: Optional[datetime] = None
+    language: str = "ar"

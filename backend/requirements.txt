@@ -8,7 +8,7 @@ colorama
 ollama
 pyannote.audio
 sqlalchemy
-aiosqlite
 python-multipart
 openai-whisper
 librosa
+moviepy

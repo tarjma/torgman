@@ -29,6 +29,12 @@ export const useProjectProcessing = (projectId: string | null) => {
         setSubtitles(message.data || []);
         break;
       
+      case 'completion':
+        // Handle completion notification with file paths
+        console.log('Project completion data:', message.data);
+        // This can be used to update UI with completion status
+        break;
+      
       case 'error':
         setError(message.message || 'An error occurred during processing');
         setProcessingStatus({
