@@ -22,6 +22,9 @@ export const useProjectSubtitleUpdates = (
     console.log('WebSocket message received:', { project_id: message.project_id, type: message.type });
     
     if (message.type === 'subtitles' && message.data) {
+      console.log('Processing subtitle update message:', message);
+      console.log('Subtitle data received:', message.data);
+      
       // Convert backend subtitle format to frontend format
       const backendSubtitles = message.data;
       const frontendSubtitles: Subtitle[] = backendSubtitles.map((sub: any) => ({
@@ -46,6 +49,7 @@ export const useProjectSubtitleUpdates = (
         }
       }));
       
+      console.log('Converted subtitles:', frontendSubtitles);
       onSubtitlesUpdate(frontendSubtitles);
     } else if ((message.type === 'status' || message.type === 'completion' || message.type === 'error') && onStatusUpdate) {
       // Handle status updates for translation progress
@@ -54,7 +58,25 @@ export const useProjectSubtitleUpdates = (
   }, [projectId, onSubtitlesUpdate, onStatusUpdate]);
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId) {
+      // Disconnect WebSocket when no project is active
+      webSocketService.disconnect();
+      return;
+    }
+    
+    // Connect to WebSocket for this project
+    const connectWebSocket = async () => {
+      try {
+        if (!webSocketService.isConnected() || webSocketService.getProjectId() !== projectId) {
+          console.log(`Connecting WebSocket for project: ${projectId}`);
+          await webSocketService.connect(projectId);
+        }
+      } catch (error) {
+        console.error('Failed to connect WebSocket:', error);
+      }
+    };
+    
+    connectWebSocket();
     
     // Listen for WebSocket messages
     webSocketService.addEventListener('*', handleWebSocketMessage);

@@ -1,19 +1,45 @@
 import json
 import logging
+import os
 from typing import List
 
-from pydantic import BaseModel
-from ..models import CaptionData
 from google import genai
+from pydantic import BaseModel
+
+from ..core.config import settings
+from ..models import CaptionData
 
 logger = logging.getLogger(__name__)
 
 class TranslationGenerator:
-    def __init__(self, model_name: str = "alibayram/smollm3"):
-        # The client gets the API key from the environment variable `GEMINI_API_KEY`.
-        self.client = genai.Client()
-
-        self.model_name = model_name
+    def __init__(self):
+        # Get API key from environment variable or user config
+        api_key = self._get_api_key()
+        if not api_key:
+            raise ValueError("Gemini API key not found. Please set it in environment variable GEMINI_API_KEY or configure it in the UI.")
+        
+        # The client gets the API key from environment or config
+        self.client = genai.Client(api_key=api_key)
+    
+    def _get_api_key(self) -> str:
+        """Get API key from environment variable or user config file"""
+        # First try environment variable
+        env_key = os.getenv("GEMINI_API_KEY")
+        if env_key:
+            return env_key
+        
+        # Then try user config file
+        config_dir = settings.data_dir / "config"
+        api_key_config_path = config_dir / "api-key.json"
+        
+        if api_key_config_path.exists():
+            with open(api_key_config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+                user_key = config_data.get("gemini_api_key")
+                if user_key:
+                    return user_key
+    
+        return None
 
     def translate_caption(self, caption: str) -> str:
         """Translate the transcription to the Arabic language using Google Gemini"""

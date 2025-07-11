@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Plus, Edit3, Trash2, Copy, Wand2, Clock, Download, Settings, Save, FileText, ChevronUp, ChevronDown, Languages } from 'lucide-react';
-import { Subtitle, ExportOptions } from '../types';
-import { formatTime, exportSubtitles, downloadFile } from '../utils/exportUtils';
+import { Plus, Edit3, Trash2, Copy, Wand2, Clock, Settings, Save, FileText, ChevronUp, ChevronDown, Languages } from 'lucide-react';
+import { Subtitle } from '../types';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
 
 interface IntegratedSubtitlePanelProps {
@@ -10,6 +9,7 @@ interface IntegratedSubtitlePanelProps {
   currentTime: number;
   videoTitle: string;
   projectId?: string;
+  translationStatus?: { status: string; message: string; progress?: number } | null;
   onAddSubtitle: (startTime: number, endTime: number) => void;
   onUpdateSubtitle: (id: string, updates: Partial<Subtitle>) => void;
   onDeleteSubtitle: (id: string) => void;
@@ -36,6 +36,7 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
   currentTime,
   videoTitle,
   projectId,
+  translationStatus,
   onAddSubtitle,
   onUpdateSubtitle,
   onDeleteSubtitle,
@@ -47,21 +48,39 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
 }) => {
   console.log('IntegratedSubtitlePanel received subtitles:', subtitles);
   console.log('Subtitles count:', subtitles.length);
+  console.log('Video title:', videoTitle); // Keep for potential future use
   
   const [expandedSubtitle, setExpandedSubtitle] = useState<string | null>(null);
-  const [showExportOptions, setShowExportOptions] = useState(false);
   const [isTranslatingProject, setIsTranslatingProject] = useState(false);
   const [translatingSubtitleId, setTranslatingSubtitleId] = useState<string | null>(null);
   const { translateProject } = useSubtitleConfig();
-  const [exportOptions, setExportOptions] = useState<ExportOptions>({
-    format: 'srt',
-    includeStyles: false,
-    encoding: 'utf-8'
-  });
+
+  // Handle WebSocket translation status updates
+  useEffect(() => {
+    if (translationStatus) {
+      if (translationStatus.status === 'completed' || translationStatus.status === 'completion') {
+        setIsTranslatingProject(false);
+        console.log('Translation completed:', translationStatus.message);
+      } else if (translationStatus.status === 'error') {
+        setIsTranslatingProject(false);
+        console.error('Translation error:', translationStatus.message);
+      } else if (translationStatus.status === 'translating') {
+        setIsTranslatingProject(true);
+        console.log('Translation in progress:', translationStatus.message);
+      }
+    }
+  }, [translationStatus]);
 
   // Ref for auto-scrolling to active subtitle
   const activeSubtitleRef = useRef<HTMLDivElement>(null);
   const subtitleListRef = useRef<HTMLDivElement>(null);
+
+  // Simple time formatting function
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Auto-scroll to active subtitle
   useEffect(() => {
@@ -146,20 +165,6 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
     }
   }, [onTranslateText]);
 
-  const handleExport = useCallback(() => {
-    if (subtitles.length === 0) {
-      alert('لا توجد ترجمات للتصدير');
-      return;
-    }
-
-    const content = exportSubtitles(subtitles, exportOptions);
-    const filename = `${videoTitle}_arabic.${exportOptions.format}`;
-    const mimeType = exportOptions.format === 'srt' ? 'text/srt' : 'text/vtt';
-    
-    downloadFile(content, filename, mimeType);
-    setShowExportOptions(false);
-  }, [subtitles, exportOptions, videoTitle]);
-
   const toggleExpanded = useCallback((id: string) => {
     setExpandedSubtitle(expandedSubtitle === id ? null : id);
   }, [expandedSubtitle]);
@@ -191,11 +196,30 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
     
     try {
       setIsTranslatingProject(true);
+      
+      // Ensure WebSocket connection before starting translation
+      try {
+        const { webSocketService } = await import('../services/webSocketService');
+        
+        // Check connection health first
+        if (!webSocketService.checkConnectionHealth()) {
+          console.log('WebSocket connection is not healthy, reconnecting...');
+          await webSocketService.forceReconnect();
+        } else {
+          await webSocketService.ensureConnection();
+        }
+        
+        console.log('WebSocket connection verified before translation');
+      } catch (wsError) {
+        console.warn('WebSocket connection issue, attempting to reconnect:', wsError);
+        // Continue with translation even if WebSocket has issues
+      }
+      
       await translateProject(projectId);
       
       // If we reach here, the request was successful
-      alert('تم إرسال طلب ترجمة المشروع بنجاح! سيتم تحديث الترجمات تلقائياً عند الانتهاء. قد تستغرق العملية عدة دقائق.');
-      // Translation will be updated automatically via WebSocket
+      // Don't show alert here - let the UI indicators show the progress
+      // Translation updates will be received via WebSocket
     } catch (error: any) {
       console.error('Translation failed:', error);
       
@@ -205,12 +229,14 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
         errorMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى.';
       } else if (error.message?.includes('network')) {
         errorMessage = 'خطأ في الشبكة. تحقق من الاتصال.';
+      } else if (error.response?.status === 400 && error.response?.data?.detail?.includes('API key')) {
+        errorMessage = 'مفتاح Gemini API غير صحيح أو غير متوفر. يرجى تكوين مفتاح API من الإعدادات.';
       }
       
       alert(errorMessage);
-    } finally {
       setIsTranslatingProject(false);
     }
+    // Don't set isTranslatingProject to false here - let WebSocket status updates handle it
   }, [projectId, translateProject]);
 
   return (
@@ -270,68 +296,44 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
           </button>
           
           {projectId && (
-            <button
-              onClick={handleTranslateProject}
-              disabled={isTranslatingProject}
-              className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-300 px-4 py-3 rounded-lg text-sm flex items-center gap-2 transition-all font-medium"
-              title="ترجمة جميع النصوص إلى العربية"
-            >
-              <Languages className={`w-4 h-4 ${isTranslatingProject ? 'animate-spin' : ''}`} />
-              {isTranslatingProject ? 'جاري الإرسال...' : 'ترجمة المشروع'}
-            </button>
-          )}
-          
-          <div className="relative">
-            <button
-              onClick={() => setShowExportOptions(!showExportOptions)}
-              className="bg-white/10 hover:bg-white/20 backdrop-blur-sm px-4 py-3 rounded-lg text-sm flex items-center gap-2 transition-all"
-            >
-              <Download className="w-4 h-4" />
-              تصدير
-            </button>
-            
-            {showExportOptions && (
-              <div className="absolute top-full right-0 mt-2 bg-white text-gray-900 rounded-xl shadow-xl border p-4 min-w-[250px] z-50">
-                <h4 className="font-semibold mb-3 text-gray-800">إعدادات التصدير</h4>
-                
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700">صيغة الملف</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => setExportOptions(prev => ({ ...prev, format: 'srt' }))}
-                        className={`px-3 py-2 rounded-lg text-sm border transition-all ${
-                          exportOptions.format === 'srt'
-                            ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
-                            : 'border-gray-300 hover:border-gray-400'
-                        }`}
-                      >
-                        SRT
-                      </button>
-                      <button
-                        onClick={() => setExportOptions(prev => ({ ...prev, format: 'vtt' }))}
-                        className={`px-3 py-2 rounded-lg text-sm border transition-all ${
-                          exportOptions.format === 'vtt'
-                            ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
-                            : 'border-gray-300 hover:border-gray-400'
-                        }`}
-                      >
-                        WebVTT
-                      </button>
-                    </div>
+            <div className="flex flex-col">
+              <button
+                onClick={handleTranslateProject}
+                disabled={isTranslatingProject}
+                className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-300 px-4 py-3 rounded-lg text-sm flex items-center gap-2 transition-all font-medium"
+                title="ترجمة جميع النصوص إلى العربية"
+              >
+                <Languages className={`w-4 h-4 ${isTranslatingProject ? 'animate-spin' : ''}`} />
+                {isTranslatingProject ? 
+                  (translationStatus?.message || 'جاري الترجمة...') : 
+                  'ترجمة المشروع'
+                }
+              </button>
+              
+              {/* Translation progress indicator */}
+              {isTranslatingProject && (
+                <div className="mt-2 bg-white/20 rounded-lg p-2">
+                  <div className="flex items-center gap-2 text-xs text-white">
+                    <div className="w-2 h-2 bg-emerald-300 rounded-full animate-pulse"></div>
+                    <span>
+                      {translationStatus?.status === 'translating' 
+                        ? 'جاري الترجمة...' 
+                        : 'معالجة الطلب...'
+                      }
+                    </span>
                   </div>
-                  
-                  <button
-                    onClick={handleExport}
-                    className="w-full bg-emerald-600 text-white px-4 py-3 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 transition-all font-medium"
-                  >
-                    <Download className="w-4 h-4" />
-                    تحميل الملف
-                  </button>
+                  {translationStatus?.progress !== undefined && (
+                    <div className="mt-1 bg-white/30 rounded-full h-1 overflow-hidden">
+                      <div 
+                        className="bg-emerald-300 h-full transition-all duration-300"
+                        style={{ width: `${translationStatus.progress}%` }}
+                      ></div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

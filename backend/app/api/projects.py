@@ -20,32 +20,22 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 @router.get("", response_model=List[ProjectData])  # Handle both with and without trailing slash
 async def list_projects(limit: int = 50, offset: int = 0):
     """List all projects with pagination"""
-    try:
-        db = await get_database()
-        projects = await db.list_projects(limit=limit, offset=offset)
-        # Ensure we always return a list
-        if projects is None:
-            return []
-        return projects
-    except Exception as e:
-        logger.error(f"Error listing projects: {e}")
-        # Return empty list instead of raising exception to prevent frontend errors
+    db = await get_database()
+    projects = await db.list_projects(limit=limit, offset=offset)
+    # Ensure we always return a list
+    if projects is None:
         return []
+    return projects
+
 
 @router.get("/{project_id}", response_model=ProjectData)
 async def get_project(project_id: str):
     """Get a project by ID"""
-    try:
-        db = await get_database()
-        project = await db.get_project(project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-        return project
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get project: {str(e)}")
+    db = await get_database()
+    project = await db.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
 
 @router.get("/{project_id}/subtitles", response_model=List[CaptionData])
 async def get_project_subtitles(project_id: str):
@@ -228,7 +218,6 @@ async def get_project_video(project_id: str):
 @router.post("/{project_id}/translate")
 async def translate_project_subtitles(project_id: str):
     """Translate project subtitles to Arabic"""
-        
     db = await get_database()
     # Check if project exists
     project = await db.get_project(project_id)
@@ -268,21 +257,25 @@ async def translate_project_background(project_id: str, subtitles):
     translation_generator._save_subtitles(project_dir, translated_subtitles)
     
     # Broadcast subtitle updates via WebSocket
-    await websocket_manager.send_to_project(project_id, {
+    logger.info(f"Broadcasting subtitle updates for project {project_id} via WebSocket")
+    websocket_message = {
         "project_id": project_id,
         "type": "subtitles",
         "data": [
             {
+                "id": f"{project_id}_subtitle_{idx}",  # Generate consistent IDs
                 "start_time": subtitle.start,
                 "end_time": subtitle.end,
                 "text": subtitle.text,
                 "confidence": subtitle.confidence,
                 "translation": subtitle.translation
             }
-            for subtitle in translated_subtitles
+            for idx, subtitle in enumerate(translated_subtitles)
         ],
         "message": "Subtitles translated successfully"
-    })
+    }
+    logger.info(f"Sending WebSocket message with {len(translated_subtitles)} subtitles")
+    await websocket_manager.send_to_project(project_id, websocket_message)
     
     # Send completion status
     await websocket_manager.send_to_project(project_id, {
@@ -291,7 +284,7 @@ async def translate_project_background(project_id: str, subtitles):
         "status": "completed",
         "message": f"Translation completed successfully! {len(translated_subtitles)} subtitles translated."
     })
-    
+
 @router.post("/translate-text")
 async def translate_text(text: str):
     """Translate a single text to Arabic"""

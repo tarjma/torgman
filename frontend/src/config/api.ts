@@ -13,6 +13,6 @@ export const API_CONFIG = {
 
 // WebSocket connection configuration
 export const WS_CONFIG = {
-  RECONNECT_INTERVAL: 3000,
-  MAX_RECONNECT_ATTEMPTS: 5
+  RECONNECT_INTERVAL: 2000, // Faster reconnection for better reliability
+  MAX_RECONNECT_ATTEMPTS: 10 // More attempts for long-running operations
 } as const;

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Search, Grid, List, Languages, FileText } from 'lucide-react';
+import { Plus, Search, Grid, List, Languages, FileText, Settings } from 'lucide-react';
 import { Project } from '../types';
 import ProjectCard from './ProjectCard';
+import ApiKeyModal from './ApiKeyModal';
+import { useApiKey } from '../hooks/useApiKey';
 
 interface HomePageProps {
   projects: Project[];
@@ -18,6 +20,8 @@ const HomePage: React.FC<HomePageProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const { status: apiKeyStatus } = useApiKey();
 
   // Filter projects based on search query
   const filteredProjects = projects.filter(project => 
@@ -39,6 +43,24 @@ const HomePage: React.FC<HomePageProps> = ({
             </div>
             
             <div className="flex items-center gap-4">
+              {/* API Key Status Indicator */}
+              {apiKeyStatus && (
+                <button
+                  onClick={() => setShowApiKeyModal(true)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    apiKeyStatus.has_api_key
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-red-100 text-red-700 hover:bg-red-200'
+                  }`}
+                  title={apiKeyStatus.has_api_key ? 'مفتاح API متكون' : 'لم يتم تكوين مفتاح API'}
+                >
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden sm:inline">
+                    {apiKeyStatus.has_api_key ? 'API مُكون' : 'تكوين API'}
+                  </span>
+                </button>
+              )}
+              
               <button
                 onClick={onCreateProject}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
@@ -131,6 +153,12 @@ const HomePage: React.FC<HomePageProps> = ({
           </div>
         )}
       </div>
+      
+      {/* API Key Configuration Modal */}
+      <ApiKeyModal 
+        isOpen={showApiKeyModal} 
+        onClose={() => setShowApiKeyModal(false)} 
+      />
     </div>
   );
 };

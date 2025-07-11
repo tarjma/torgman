@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import List, Dict
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +45,15 @@ class ConnectionManager:
     
     async def send_to_project(self, project_id: str, message: dict):
         """Send message to all WebSockets connected to a specific project"""
+        logger.info(f"Sending message to project {project_id}: {message.get('type', 'unknown')}")
         if project_id in self.project_connections:
+            logger.info(f"Found {len(self.project_connections[project_id])} connections for project {project_id}")
             disconnected = []
             for websocket in self.project_connections[project_id]:
                 try:
-                    await websocket.send_text(json.dumps(message))
+                    message_str = json.dumps(message)
+                    await websocket.send_text(message_str)
+                    logger.debug(f"Message sent successfully to WebSocket for project {project_id}")
                 except Exception as e:
                     logger.error(f"Error sending to project {project_id}: {e}")
                     disconnected.append(websocket)
@@ -57,6 +61,8 @@ class ConnectionManager:
             # Clean up disconnected WebSockets
             for ws in disconnected:
                 self.disconnect(ws, project_id)
+        else:
+            logger.warning(f"No WebSocket connections found for project {project_id}")
     
     async def broadcast(self, message: dict):
         """Send message to all connected WebSockets"""

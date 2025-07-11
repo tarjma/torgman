@@ -19,12 +19,24 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
             data = await websocket.receive_text()
             logger.debug(f"Received WebSocket message for project {project_id}: {data}")
             
-            # Echo back for heartbeat/testing
-            await manager.send_to_project(project_id, {
-                "type": "heartbeat",
-                "project_id": project_id,
-                "message": "Connection active"
-            })
+            try:
+                import json
+                message = json.loads(data)
+                
+                # Handle ping messages with pong response
+                if message.get('type') == 'ping':
+                    await manager.send_message({
+                        "type": "pong",
+                        "project_id": project_id,
+                        "message": "Connection active"
+                    }, websocket)
+                    logger.debug(f"Sent pong response to project {project_id}")
+                
+            except json.JSONDecodeError:
+                logger.warning(f"Received invalid JSON from project {project_id}: {data}")
+            except Exception as e:
+                logger.error(f"Error handling WebSocket message for project {project_id}: {e}")
+                
     except WebSocketDisconnect:
         manager.disconnect(websocket, project_id)
         logger.info(f"WebSocket disconnected for project {project_id}")

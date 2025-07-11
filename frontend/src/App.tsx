@@ -17,9 +17,14 @@ import { useVideoProcessor } from './hooks/useVideoProcessor';
 import { useAITranslation } from './hooks/useAITranslation';
 import { useProjectStatusUpdates } from './hooks/useProjectStatusUpdates';
 import { useProjectSubtitleUpdates } from './hooks/useProjectSubtitleUpdates';
+import { useSubtitlePolling } from './hooks/useSubtitlePolling';
 
 // Services
 import { projectService } from './services/projectService';
+import { webSocketService } from './services/webSocketService';
+
+// Utils  
+import { exportSubtitles, downloadFile } from './utils/exportUtils';
 
 // Types
 import { Project } from './types';
@@ -33,6 +38,7 @@ function App() {
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [translationStatus, setTranslationStatus] = useState<{ status: string; message: string; progress?: number } | null>(null);
 
   // Projects management - using a default user ID for local usage
   const defaultUserId = 'local-user';
@@ -55,17 +61,35 @@ function App() {
     },
     (status, message) => {
       console.log('Received status update:', status, message);
+      
+      // Update translation status for UI
+      setTranslationStatus({ status, message });
+      
       // Show status notifications to user
-      if (status === 'completed') {
-        // Show success notification
-        setTimeout(() => alert(message), 500); // Small delay to let UI update
+      if (status === 'completed' || status === 'completion') {
+        // Show success notification and clear status after delay
+        setTimeout(() => {
+          alert(message);
+          setTranslationStatus(null);
+        }, 500);
       } else if (status === 'failed' || status === 'error') {
-        // Show error notification
+        // Show error notification and clear status
         alert(`خطأ: ${message}`);
+        setTranslationStatus(null);
       } else if (status === 'translating') {
-        // Optionally show progress indicator
+        // Keep status for progress indicator
         console.log('Translation in progress:', message);
       }
+    }
+  );
+
+  // Set up polling as fallback for subtitle updates during translation
+  useSubtitlePolling(
+    currentProjectId,
+    translationStatus?.status === 'translating' || false,
+    (subtitles) => {
+      console.log('Received polled subtitle update:', subtitles);
+      loadSubtitles(subtitles);
     }
   );
 
@@ -264,6 +288,9 @@ function App() {
     setVideoInfo(null);
     clearSubtitles();
     setCurrentProjectId(null);
+    
+    // Reset WebSocket service when leaving project
+    webSocketService.reset();
   }, [setVideoInfo, clearSubtitles]);
 
   const handleTranslateText = useCallback(async (text: string) => {
@@ -290,6 +317,25 @@ function App() {
     setCurrentTime(startTime);
     setActiveSubtitle(subtitleId);
   }, [setCurrentTime, setActiveSubtitle]);
+
+  const handleExportSubtitles = useCallback(() => {
+    if (subtitles.length === 0) {
+      alert('لا توجد ترجمات للتصدير');
+      return;
+    }
+
+    const exportOptions = {
+      format: 'srt' as const,
+      includeStyles: false,
+      encoding: 'utf-8' as const
+    };
+
+    const content = exportSubtitles(subtitles, exportOptions);
+    const filename = `${videoInfo?.title || 'subtitles'}_arabic.${exportOptions.format}`;
+    const mimeType = 'text/srt';
+    
+    downloadFile(content, filename, mimeType);
+  }, [subtitles, videoInfo]);
 
   // Auto-update active subtitle based on current time
   const handleTimeUpdate = useCallback((time: number) => {
@@ -378,7 +424,7 @@ function App() {
         subtitleCount={subtitles.length}
         onBackToHome={handleBackToHome}
         onShowGlobalSettings={() => setShowGlobalSettings(true)}
-        onExport={() => {/* Handle export */}}
+        onExport={handleExportSubtitles}
         onFullscreen={() => {/* Handle fullscreen */}}
       />
       
@@ -392,6 +438,7 @@ function App() {
             currentTime={currentTime}
             videoTitle={videoInfo.title}
             projectId={currentProjectId || undefined}
+            translationStatus={translationStatus}
             onAddSubtitle={(startTime, endTime) => {
               console.log('Adding subtitle:', { startTime, endTime });
               return addSubtitle(startTime, endTime);
