@@ -1,22 +1,20 @@
 import logging
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import projects_router, websocket_router, youtube_router
-from .api.websocket import manager
+from .api import projects_router, websocket_router, youtube_router, config_router
 from .core.config import settings
 from .core.database import get_database
-from .services import SubtitleGenerator, VideoFileProcessor, YouTubeVideoProcessor
+from .services import UnifiedVideoProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title=settings.app_name, version=settings.app_version)
+app = FastAPI(title=settings.app_name)
 
 # CORS middleware
 app.add_middleware(
@@ -27,14 +25,13 @@ app.add_middleware(
     allow_headers=settings.cors_headers,
 )
 
-# Initialize services
-youtube_processor = YouTubeVideoProcessor()
-subtitle_generator = SubtitleGenerator()
-file_processor = VideoFileProcessor()
+# Initialize unified video processor
+video_processor = UnifiedVideoProcessor()
 
 # Include API routers AFTER service initialization
 app.include_router(projects_router, prefix=settings.api_prefix)
 app.include_router(youtube_router, prefix=settings.api_prefix)
+app.include_router(config_router, prefix=settings.api_prefix)
 app.include_router(websocket_router)
 
 # Add explicit routes for trailing slash issues
@@ -156,198 +153,11 @@ async def serve_frontend(path: str = ""):
 
 async def process_youtube_video_task(url: str, project_id: str, resolution: str = "720p"):
     """Background task to process YouTube video with enhanced features"""
-    # Send initial status
-    await manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "status",
-        "status": "downloading_video",
-        "progress": 5,
-        "message": f"Downloading YouTube video in {resolution}..."
-    })
-    
-    # Step 1: Download full video
-    video_path = youtube_processor.download_video(url, project_id, resolution)
-    
-    await manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "status",
-        "status": "downloading_thumbnail",
-        "progress": 20,
-        "message": "Downloading video thumbnail..."
-    })
-    
-    # Step 2: Download thumbnail
-    thumbnail_path = youtube_processor.download_thumbnail(url, project_id)
-    
-    await manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "status",
-        "status": "extracting_audio",
-        "progress": 35,
-        "message": "Extracting audio from video..."
-    })
-    
-    # Step 3: Extract audio
-    audio_path = youtube_processor.extract_audio(video_path, project_id)
-    
-    await manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "status",
-        "status": "generating_subtitles",
-        "progress": 60,
-        "message": "Generating subtitles with speech recognition..."
-    })
-    
-    # Step 4: Generate subtitles (includes segmentation and transcription)
-    subtitles = subtitle_generator.generate_transcription(audio_path)
-    
-    await manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "status",
-        "status": "saving_data",
-        "progress": 90,
-        "message": "Saving project data..."
-    })
-    
-    # Step 5: Save project metadata and subtitles
-    project_dir = settings.get_project_dir(project_id)
-    youtube_processor._save_project_metadata(
-        project_dir, 
-        project_id, 
-        url, 
-        resolution, 
-        Path(video_path).name if video_path else "",
-        Path(thumbnail_path).name if thumbnail_path else ""
-    )
-    youtube_processor._save_subtitles(project_dir, subtitles)
-    
-    # Step 6: Save subtitles to database
-    db = await get_database()
-    await db.save_subtitles(project_id, subtitles)
-    
-    # Update project status to completed
-    await db.update_project_status(project_id, "completed", len(subtitles))
-    
-    await manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "status",
-        "status": "completed",
-        "progress": 100,
-        "message": "Processing completed successfully!"
-    })
-    
-    # Send final subtitles
-    await manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "subtitles",
-        "data": subtitles
-    })
-    
-    # Send completion notification with file paths
-    await manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "completion",
-        "data": {
-            "video_file": Path(video_path).name if video_path else "",
-            "audio_file": f"{project_id}_audio.wav",
-            "thumbnail_file": Path(thumbnail_path).name if thumbnail_path else "",
-            "subtitle_count": len(subtitles)
-        }
-    })
-    
-    logger.info(f"YouTube video processing completed for project {project_id}")
-    logger.info(f"Video file: {video_path}")
-    logger.info(f"Audio file: {audio_path}")
-    logger.info(f"Thumbnail file: {thumbnail_path}")
+    await video_processor.process_youtube_video(url, project_id, resolution)
 
 async def process_video_file_task(file_path: str, project_id: str):
     """Background task to process uploaded video file"""
-    try:
-        # Send initial status
-        await manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "status",
-            "status": "processing",
-            "progress": 10,
-            "message": "Processing uploaded video file..."
-        })
-        
-        # Step 1: Extract video information and duration
-        await manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "status",
-            "status": "extracting_info",
-            "progress": 20,
-            "message": "Extracting video information..."
-        })
-        
-        # Get video info (for future use, could be used to update duration)
-        # video_info = file_processor.get_video_info(file_path)
-        
-        # Update project status to processing
-        db = await get_database()
-        await db.update_project_status(project_id, "processing", None)
-        
-        # Step 2: Extract audio
-        await manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "status",
-            "status": "extracting_audio",
-            "progress": 40,
-            "message": "Extracting audio from video file..."
-        })
-        
-        audio_path = file_processor.extract_audio(file_path, project_id)
-        
-        await manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "status",
-            "status": "generating_subtitles",
-            "progress": 70,
-            "message": "Generating subtitles with speech recognition..."
-        })
-        
-        # Step 3: Generate subtitles (includes segmentation and transcription)
-        subtitles = subtitle_generator.generate_transcription(audio_path)
-        
-        await manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "status",
-            "status": "completed",
-            "progress": 100,
-            "message": "Processing completed successfully!"
-        })
-        
-        # Send final subtitles
-        await manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "subtitles",
-            "data": subtitles
-        })
-        
-        # Save subtitles to database
-        await db.save_subtitles(project_id, subtitles)
-        
-        # Update project status to completed
-        await db.update_project_status(project_id, "completed", len(subtitles))
-        
-        logger.info(f"File processing completed for project {project_id}")
-        logger.info(f"Audio file preserved at: {audio_path}")
-            
-    except Exception as e:
-        logger.error(f"Error processing file {project_id}: {str(e)}")
-        await manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "error",
-            "message": f"Processing failed: {str(e)}"
-        })
-        
-        # Update project status to failed
-        try:
-            db = await get_database()
-            await db.update_project_status(project_id, "failed", None)
-        except Exception as db_error:
-            logger.error(f"Failed to update project status: {db_error}")
+    await video_processor.process_video_file(file_path, project_id)
 
 if __name__ == "__main__":
     import uvicorn

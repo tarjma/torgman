@@ -6,9 +6,12 @@ class Settings(BaseSettings):
     app_name: str = "Torgman"
     
     # Data directory - centralized location for all persistent data
-    data_dir: Path = Path(__file__).parent.parent / "data"
+    base_dir: Path = Path(__file__).parent.parent.parent
     
-    # Database settings
+    # Data directories
+    data_dir: Path = base_dir / "data"  # Main data directory
+    projects_dir: Path = data_dir / "projects"  # Each project gets its own folder
+    config_dir: Path = data_dir / "config"  # Application configuration files
     database_path: Path = data_dir / "torgman.db"
     
     # CORS settings
@@ -17,10 +20,8 @@ class Settings(BaseSettings):
     cors_methods: list = ["*"]
     cors_headers: list = ["*"]
     
-    # File storage settings
-    projects_dir: Path = data_dir / "projects"  # Each project gets its own folder
-    config_dir: Path = data_dir / "config"  # Application configuration files
-    static_dir: Path = Path(__file__).parent.parent / "static"  # Static files (e.g., favicon, images)
+    # Static files
+    static_dir: Path = base_dir / "static"  # Static files (e.g., favicon, images)
     
     def get_project_dir(self, project_id: str) -> Path:
         """Get the directory path for a specific project"""

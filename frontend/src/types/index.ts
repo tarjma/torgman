@@ -5,6 +5,7 @@ export interface Subtitle {
   text: string;        // This represents both original and translated text
   originalText?: string;
   translatedText?: string;
+  translation?: string; // Arabic translation from backend
   speaker_id?: string; // Added to match backend
   confidence?: number; // Added to match backend
   position: {

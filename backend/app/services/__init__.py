@@ -1,6 +1,8 @@
+from .base_video_processor import BaseVideoProcessor
 from .youtube_service import YouTubeVideoProcessor
-from .subtitle_service import SubtitleGenerator
+from .transcription_service import TranscriptionGenerator
 from .websocket_service import ConnectionManager
 from .file_service import VideoFileProcessor
+from .unified_processor import UnifiedVideoProcessor
 
-__all__ = ["YouTubeVideoProcessor", "SubtitleGenerator", "ConnectionManager", "VideoFileProcessor"]
+__all__ = ["BaseVideoProcessor", "YouTubeVideoProcessor", "TranscriptionGenerator", "ConnectionManager", "VideoFileProcessor", "UnifiedVideoProcessor"]

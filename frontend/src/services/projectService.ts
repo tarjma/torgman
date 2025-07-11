@@ -19,7 +19,7 @@ export interface CaptionData {
   end: number;
   text: string;
   confidence?: number;
-  language?: string;
+  translation?: string;
 }
 
 export const projectService = {

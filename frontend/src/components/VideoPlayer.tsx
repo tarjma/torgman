@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, SkipBack, SkipForward, Settings, Subtitles } from 'lucide-react';
 import { Subtitle } from '../types';
 import { formatTime } from '../utils/exportUtils';
+import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
+import SubtitleConfigModal from './SubtitleConfigModal';
 
 interface VideoPlayerProps {
   videoSrc?: string;
@@ -30,6 +32,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSubtitleConfig, setShowSubtitleConfig] = useState(false);
+  
+  // Use global subtitle configuration
+  const { config: subtitleConfig } = useSubtitleConfig();
 
   // Create video URL from file
   useEffect(() => {
@@ -203,28 +209,43 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         {/* Subtitle Overlay */}
         {showSubtitles && currentSubtitle && (
           <div 
-            className="absolute bottom-16 left-1/2 transform -translate-x-1/2 px-4 py-2 text-center max-w-[80%] transition-opacity duration-300"
+            className={`absolute transition-opacity duration-300 ${
+              subtitleConfig.position === 'top-center' ? 'top-0' :
+              subtitleConfig.position === 'center' ? 'top-1/2 -translate-y-1/2' :
+              'bottom-0'
+            } left-1/2 transform -translate-x-1/2`}
             style={{
-              fontFamily: currentSubtitle.styling.fontFamily,
-              fontSize: `${Math.max(currentSubtitle.styling.fontSize, 16)}px`,
-              color: currentSubtitle.styling.color,
-              backgroundColor: currentSubtitle.styling.backgroundColor,
-              fontWeight: currentSubtitle.styling.bold ? 'bold' : 'normal',
-              fontStyle: currentSubtitle.styling.italic ? 'italic' : 'normal',
-              textShadow: currentSubtitle.styling.outline 
-                ? `2px 2px 0 ${currentSubtitle.styling.outlineColor}, -2px -2px 0 ${currentSubtitle.styling.outlineColor}, 2px -2px 0 ${currentSubtitle.styling.outlineColor}, -2px 2px 0 ${currentSubtitle.styling.outlineColor}` 
-                : '1px 1px 2px rgba(0,0,0,0.8)',
-              direction: 'rtl',
-              borderRadius: '4px',
-              opacity: currentSubtitle.styling.opacity || 1,
-              top: `${currentSubtitle.position.y}%`,
-              left: `${currentSubtitle.position.x}%`,
-              transform: 'translate(-50%, -50%)',
-              whiteSpace: 'pre-wrap',
-              lineHeight: 1.4
+              fontFamily: subtitleConfig.fontFamily,
+              fontSize: subtitleConfig.fontSize,
+              fontWeight: subtitleConfig.fontWeight,
+              color: subtitleConfig.color,
+              backgroundColor: subtitleConfig.backgroundColor,
+              textAlign: subtitleConfig.textAlign as any,
+              padding: subtitleConfig.padding,
+              borderRadius: subtitleConfig.borderRadius,
+              textShadow: subtitleConfig.textShadow,
+              lineHeight: subtitleConfig.lineHeight,
+              maxWidth: subtitleConfig.maxWidth,
+              marginBottom: subtitleConfig.position === 'bottom-center' ? subtitleConfig.marginBottom : undefined,
+              marginTop: subtitleConfig.position === 'top-center' ? subtitleConfig.marginTop : undefined,
+              whiteSpace: 'pre-wrap' as const,
+              direction: 'rtl' as const
             }}
           >
-            {currentSubtitle.translatedText || currentSubtitle.text || currentSubtitle.originalText}
+            <div>
+              {currentSubtitle.translatedText || currentSubtitle.text || currentSubtitle.originalText}
+            </div>
+            {subtitleConfig.showTranslation && currentSubtitle.translation && (
+              <div 
+                style={{
+                  color: subtitleConfig.translationColor,
+                  fontSize: subtitleConfig.translationFontSize,
+                  marginTop: '4px'
+                }}
+              >
+                {currentSubtitle.translation}
+              </div>
+            )}
           </div>
         )}
 
@@ -246,19 +267,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       </div>
 
       {/* Video Controls */}
-      <div className="bg-gray-900 p-4 space-y-3" dir="ltr">
+      <div className="bg-gradient-to-t from-black via-black/80 to-transparent p-6 space-y-4" dir="ltr">
         {/* Progress Bar */}
         <div 
           ref={progressRef}
-          className="relative h-2 bg-gray-600 rounded cursor-pointer group"
+          className="relative h-2 bg-white/20 rounded-full cursor-pointer group"
           onClick={handleSeek}
         >
           <div 
-            className="absolute top-0 left-0 h-full bg-blue-500 rounded transition-all duration-150"
+            className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-150 shadow-lg"
             style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
           />
           <div 
-            className="absolute top-1/2 transform -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-grab active:cursor-grabbing"
             style={{ left: `${duration ? (currentTime / duration) * 100 : 0}%` }}
           />
         </div>
@@ -268,28 +289,30 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           <div className="flex items-center space-x-4">
             <button
               onClick={() => skipTime(-10)}
-              className="p-2 hover:bg-gray-700 rounded transition-colors"
+              className="p-3 hover:bg-white/20 rounded-full transition-all duration-200 group"
+              title="ترجع 10 ثوان"
             >
-              <SkipBack className="w-5 h-5" />
+              <SkipBack className="w-6 h-6 group-hover:scale-110 transition-transform" />
             </button>
             
             <button
               onClick={togglePlay}
-              className="p-3 bg-blue-600 hover:bg-blue-700 rounded-full transition-colors"
+              className="p-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 rounded-full transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
             >
-              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
             </button>
             
             <button
               onClick={() => skipTime(10)}
-              className="p-2 hover:bg-gray-700 rounded transition-colors"
+              className="p-3 hover:bg-white/20 rounded-full transition-all duration-200 group"
+              title="تقدم 10 ثوان"
             >
-              <SkipForward className="w-5 h-5" />
+              <SkipForward className="w-6 h-6 group-hover:scale-110 transition-transform" />
             </button>
           </div>
 
           <div className="flex items-center space-x-6">
-            <div className="text-sm font-mono text-gray-300">
+            <div className="text-sm font-mono text-gray-300 bg-black/30 px-3 py-1 rounded-full">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
             
@@ -297,20 +320,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <div className="relative">
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className="p-2 hover:bg-gray-700 rounded transition-colors"
+                className="p-3 hover:bg-white/20 rounded-full transition-all duration-200"
+                title="إعدادات السرعة"
               >
                 <Settings className="w-5 h-5" />
               </button>
               {showSettings && (
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-800 rounded-lg p-3 min-w-[120px]">
-                  <div className="text-sm font-medium mb-2 text-center">السرعة</div>
-                  <div className="space-y-1">
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 bg-black/90 backdrop-blur-sm rounded-xl p-4 min-w-[140px] shadow-xl border border-white/10">
+                  <div className="text-sm font-medium mb-3 text-center text-white">السرعة</div>
+                  <div className="space-y-2">
                     {[0.5, 0.75, 1, 1.25, 1.5, 2].map(rate => (
                       <button
                         key={rate}
                         onClick={() => changePlaybackRate(rate)}
-                        className={`w-full px-3 py-1 rounded text-sm transition-colors ${
-                          playbackRate === rate ? 'bg-blue-600' : 'hover:bg-gray-700'
+                        className={`w-full px-4 py-2 rounded-lg text-sm transition-all ${
+                          playbackRate === rate 
+                            ? 'bg-blue-600 text-white font-medium' 
+                            : 'hover:bg-white/10 text-gray-300'
                         }`}
                       >
                         {rate}x
@@ -322,10 +348,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             </div>
             
             {/* Volume Control */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
               <button 
                 onClick={toggleMute} 
-                className="p-2 hover:bg-gray-700 rounded transition-colors"
+                className="p-3 hover:bg-white/20 rounded-full transition-all duration-200"
+                title={isMuted ? 'إلغاء الكتم' : 'كتم الصوت'}
               >
                 {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
               </button>
@@ -336,35 +363,51 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                className="w-20 accent-blue-500"
+                className="w-24 accent-blue-500 h-1 bg-white/20 rounded-lg appearance-none slider"
               />
             </div>
             
             {/* Subtitle Toggle */}
             <button
               onClick={() => setShowSubtitles(!showSubtitles)}
-              className={`p-2 rounded transition-colors relative ${
-                showSubtitles ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'
+              className={`p-3 rounded-full transition-all duration-200 relative ${
+                showSubtitles ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-white/20'
               }`}
               title={`${showSubtitles ? 'إخفاء' : 'إظهار'} الترجمات (${subtitles.length})`}
             >
               <Subtitles className="w-5 h-5" />
               {subtitles.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
                   {subtitles.length}
                 </span>
               )}
             </button>
             
+            {/* Subtitle Configuration */}
+            <button
+              onClick={() => setShowSubtitleConfig(true)}
+              className="p-3 hover:bg-white/20 rounded-full transition-all duration-200"
+              title="إعدادات الترجمة"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+            
             <button
               onClick={toggleFullscreen}
-              className="p-2 hover:bg-gray-700 rounded transition-colors"
+              className="p-3 hover:bg-white/20 rounded-full transition-all duration-200"
+              title="ملء الشاشة"
             >
               <Maximize className="w-5 h-5" />
             </button>
           </div>
         </div>
       </div>
+      
+      {/* Subtitle Configuration Modal */}
+      <SubtitleConfigModal 
+        isOpen={showSubtitleConfig} 
+        onClose={() => setShowSubtitleConfig(false)} 
+      />
     </div>
   );
 };

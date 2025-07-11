@@ -19,8 +19,15 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Ollama
-RUN curl -fsSL https://ollama.ai/install.sh | sh
+# # Install Ollama
+# RUN curl -fsSL https://ollama.ai/install.sh | sh
+# RUN ollama serve & \
+#     sleep 10 && \
+#     ollama pull alibayram/smollm3:latest
+
+# Cache Models
+RUN pip install openai-whisper
+RUN python -c "import whisper; whisper.load_model('turbo')"
 
 # Set working directory
 WORKDIR /app
@@ -28,6 +35,8 @@ WORKDIR /app
 # Copy backend requirements and install Python dependencies
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install google-genai spacy
+RUN python -m spacy download en_core_web_sm
 
 # Copy backend code
 COPY backend/app ./app
@@ -35,15 +44,8 @@ COPY backend/app ./app
 # Copy built frontend from stage 1
 COPY --from=frontend-build /app/frontend/dist ./static
 
-# Create organized data directory structure for persistence
-RUN mkdir -p /app/data/{projects,config}
-
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
-
-# Start the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# Start the application using the start script
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

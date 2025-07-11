@@ -118,35 +118,30 @@ class Database:
     
     async def save_subtitles(self, project_id: str, subtitles: List[Dict[str, Any]]) -> bool:
         """Save subtitles for a project"""
-        try:
-            async with self.get_connection() as db:
-                # Clear existing subtitles
-                await db.execute("DELETE FROM subtitles WHERE project_id = ?", (project_id,))
-                
-                # Insert new subtitles
-                for subtitle in subtitles:
-                    await db.execute("""
-                        INSERT INTO subtitles (id, project_id, start_time, end_time, text, speaker_id, confidence)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        subtitle["id"],
-                        project_id,
-                        subtitle["start_time"],
-                        subtitle["end_time"],
-                        subtitle["text"],
-                        subtitle.get("speaker_id"),
-                        subtitle.get("confidence")
-                    ))
-                
-                # Update project subtitle count
-                await self.update_project_status(project_id, "completed", len(subtitles))
-                
-                await db.commit()
-                logger.info(f"Saved {len(subtitles)} subtitles for project {project_id}")
-                return True
-        except Exception as e:
-            logger.error(f"Error saving subtitles: {e}")
-            return False
+        async with self.get_connection() as db:
+            # Clear existing subtitles
+            await db.execute("DELETE FROM subtitles WHERE project_id = ?", (project_id,))
+            
+            # Insert new subtitles
+            for subtitle in subtitles:
+                await db.execute("""
+                    INSERT INTO subtitles (id, project_id, start_time, end_time, text, speaker_id, confidence)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    project_id,
+                    subtitle["start_time"],
+                    subtitle["end_time"],
+                    subtitle["text"],
+                    subtitle.get("speaker_id"),
+                    subtitle.get("confidence")
+                ))
+            
+            # Update project subtitle count
+            await self.update_project_status(project_id, "completed", len(subtitles))
+            
+            await db.commit()
+            logger.info(f"Saved {len(subtitles)} subtitles for project {project_id}")
+            return True
     
     def get_project_subtitles(self, project_id: str) -> List[CaptionData]:
         """Get subtitles for a project"""
@@ -161,7 +156,7 @@ class Database:
                 end=subtitle["end"],
                 text=subtitle["text"],
                 confidence=subtitle["confidence"],
-                language=subtitle["language"]
+                translation=subtitle.get("translation", None)
             ))
         return subtitles
 

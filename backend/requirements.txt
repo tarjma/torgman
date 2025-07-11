@@ -6,7 +6,6 @@ aiosqlite
 yt-dlp
 colorama
 ollama
-pyannote.audio
 sqlalchemy
 python-multipart
 openai-whisper

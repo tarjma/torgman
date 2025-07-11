@@ -1,12 +1,17 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse
-from typing import List
+import asyncio
 import logging
 from pathlib import Path
+from typing import List
 
-from ..core.database import get_database
-from ..models.project import ProjectData, CaptionData
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from moviepy import VideoFileClip
+
 from ..core.config import settings
+from ..core.database import get_database
+from ..models.project import CaptionData, ProjectData
+from ..services.translation_service import TranslationGenerator
+from .websocket import manager as websocket_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -57,44 +62,32 @@ async def get_project_subtitles(project_id: str):
 @router.delete("/{project_id}")
 async def delete_project(project_id: str):
     """Delete a project and its subtitles"""
-    try:
-        db = await get_database()
-        # Check if project exists
-        project = await db.get_project(project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-        
-        success = await db.delete_project(project_id)
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to delete project")
-        
-        return {"message": "Project deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete project: {str(e)}")
+    db = await get_database()
+    # Check if project exists
+    project = await db.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    success = await db.delete_project(project_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete project")
+    
+    return {"message": "Project deleted successfully"}
 
 @router.put("/{project_id}/status")
 async def update_project_status(project_id: str, status: str, subtitle_count: int = None):
     """Update project status"""
-    try:
-        db = await get_database()
-        # Check if project exists
-        project = await db.get_project(project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-        
-        success = await db.update_project_status(project_id, status, subtitle_count)
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to update project status")
-        
-        return {"message": "Project status updated successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating project status {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update project status: {str(e)}")
+    db = await get_database()
+    # Check if project exists
+    project = await db.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    success = await db.update_project_status(project_id, status, subtitle_count)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update project status")
+    
+    return {"message": "Project status updated successfully"}
 
 @router.post("/upload")
 async def upload_project_file(
@@ -119,9 +112,10 @@ async def upload_project_file(
         buffer.write(content)
     
     # Get video duration (basic approach)
-    # TODO: Implement proper video duration extraction
-    duration = 0.0
-    
+    with VideoFileClip(str(file_path)) as video_clip:
+        # Use moviepy to get the duration in seconds
+        duration = int(video_clip.duration)
+
     # Create project in database
     db = await get_database()
     project_data = {
@@ -138,9 +132,7 @@ async def upload_project_file(
         if file_path.exists():
             file_path.unlink()
         raise HTTPException(status_code=500, detail="Failed to create project in database")
-    
-    # Start background file processing (import here to avoid circular imports)
-    import asyncio
+
     from ..main import process_video_file_task
     asyncio.create_task(process_video_file_task(
         str(file_path), 
@@ -232,3 +224,84 @@ async def get_project_video(project_id: str):
             "Access-Control-Allow-Origin": "*"
         }
     )
+
+@router.post("/{project_id}/translate")
+async def translate_project_subtitles(project_id: str):
+    """Translate project subtitles to Arabic"""
+        
+    db = await get_database()
+    # Check if project exists
+    project = await db.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get current subtitles
+    subtitles = db.get_project_subtitles(project_id)
+    if not subtitles:
+        raise HTTPException(status_code=404, detail="No subtitles found for this project")
+    
+    # Send immediate response and process translation in background
+    asyncio.create_task(translate_project_background(project_id, subtitles))
+    
+    return {
+        "message": "Translation started successfully",
+        "subtitle_count": len(subtitles),
+        "status": "processing"
+    }
+
+async def translate_project_background(project_id: str, subtitles):
+    """Background task to translate project subtitles"""
+    # Send status update that translation started
+    await websocket_manager.send_to_project(project_id, {
+        "project_id": project_id,
+        "type": "status",
+        "status": "translating",
+        "message": "Translation in progress..."
+    })
+    
+    # Translate subtitles
+    translation_generator = TranslationGenerator()
+    translated_subtitles = translation_generator.translate_transcription(subtitles)
+    
+    # Save to project directory
+    project_dir = settings.get_project_dir(project_id)
+    translation_generator._save_subtitles(project_dir, translated_subtitles)
+    
+    # Broadcast subtitle updates via WebSocket
+    await websocket_manager.send_to_project(project_id, {
+        "project_id": project_id,
+        "type": "subtitles",
+        "data": [
+            {
+                "start_time": subtitle.start,
+                "end_time": subtitle.end,
+                "text": subtitle.text,
+                "confidence": subtitle.confidence,
+                "translation": subtitle.translation
+            }
+            for subtitle in translated_subtitles
+        ],
+        "message": "Subtitles translated successfully"
+    })
+    
+    # Send completion status
+    await websocket_manager.send_to_project(project_id, {
+        "project_id": project_id,
+        "type": "completion",
+        "status": "completed",
+        "message": f"Translation completed successfully! {len(translated_subtitles)} subtitles translated."
+    })
+    
+@router.post("/translate-text")
+async def translate_text(text: str):
+    """Translate a single text to Arabic"""
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+    
+    translation_generator = TranslationGenerator()
+    translated_text = translation_generator.translate_caption(text)
+    
+    return {
+        "original": text,
+        "translated": translated_text
+    }

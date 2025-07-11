@@ -6,26 +6,31 @@ export interface SubtitleUpdateHandler {
   (subtitles: Subtitle[]): void;
 }
 
+export interface StatusUpdateHandler {
+  (status: string, message: string): void;
+}
+
 export const useProjectSubtitleUpdates = (
   projectId: string | null,
-  onSubtitlesUpdate: SubtitleUpdateHandler
+  onSubtitlesUpdate: SubtitleUpdateHandler,
+  onStatusUpdate?: StatusUpdateHandler
 ) => {
   const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
     // Only handle messages for the current project
     if (!projectId || message.project_id !== projectId) return;
     
-    console.log('Subtitle update received:', { project_id: message.project_id, type: message.type });
+    console.log('WebSocket message received:', { project_id: message.project_id, type: message.type });
     
     if (message.type === 'subtitles' && message.data) {
       // Convert backend subtitle format to frontend format
       const backendSubtitles = message.data;
       const frontendSubtitles: Subtitle[] = backendSubtitles.map((sub: any) => ({
-        id: sub.id,
+        id: sub.id || `sub_${Date.now()}_${Math.random()}`, // Generate ID if missing
         start_time: sub.start_time,
         end_time: sub.end_time,
         text: sub.text,
         originalText: sub.text,
-        translatedText: '',
+        translatedText: sub.translation || '', // Include translation from backend
         position: { x: 50, y: 80 },
         styling: {
           fontFamily: 'Noto Sans Arabic, Arial, sans-serif',
@@ -42,8 +47,11 @@ export const useProjectSubtitleUpdates = (
       }));
       
       onSubtitlesUpdate(frontendSubtitles);
+    } else if ((message.type === 'status' || message.type === 'completion' || message.type === 'error') && onStatusUpdate) {
+      // Handle status updates for translation progress
+      onStatusUpdate(message.status || message.type, message.message || 'Processing...');
     }
-  }, [projectId, onSubtitlesUpdate]);
+  }, [projectId, onSubtitlesUpdate, onStatusUpdate]);
 
   useEffect(() => {
     if (!projectId) return;

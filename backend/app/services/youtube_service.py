@@ -1,18 +1,16 @@
-import json
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
 import requests
 import yt_dlp
-from moviepy import VideoFileClip
 
 from ..core.config import settings
+from .base_video_processor import BaseVideoProcessor
 
 logger = logging.getLogger(__name__)
 
-class YouTubeVideoProcessor:
+class YouTubeVideoProcessor(BaseVideoProcessor):
     """Process YouTube videos to download video and extract audio for subtitle generation"""
     
     def __init__(self):
@@ -151,58 +149,12 @@ class YouTubeVideoProcessor:
         return format_map.get(resolution, format_map["720p"])
     
     def _save_project_metadata(self, project_dir: Path, project_id: str, url: str, resolution: str, video_file: str = "", thumbnail_file: str = "") -> None:
-        """Save project metadata to a JSON file"""
-        metadata = {
-            "project_id": project_id,
-            "youtube_url": url,
-            "resolution": resolution,
-            "created_at": datetime.now().isoformat(),
-            "video_file": video_file,
-            "thumbnail_file": thumbnail_file,
-        }
-        
-        # Save metadata to JSON file
-        metadata_path = project_dir / "metadata.json"
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2)
-        logger.info(f"Project metadata saved: {metadata_path}")
-
-
-    def _save_subtitles(self, project_dir: Path, subtitles: Dict[str, Any]) -> None:
-        """Save subtitles to a JSON file"""
-        # Save subtitles to JSON file
-        subtitles_path = project_dir / "subtitles.json"
-        with open(subtitles_path, 'w', encoding='utf-8') as f:
-            json.dump(subtitles, f, indent=2, ensure_ascii=False)
-        logger.info(f"Subtitles saved successfully: {subtitles_path}")
-
-
-    def extract_audio(self, video_path: str, project_id: str) -> str:
-        """Extract audio from YouTube video using MoviePy for better processing"""
-        project_dir = settings.get_project_dir(project_id)
-        output_path = project_dir / f"{project_id}_audio.wav"
-        
-        # Load video with MoviePy
-        video_clip = VideoFileClip(video_path)
-        
-        # Extract audio
-        audio_clip = video_clip.audio
-        
-        # Write audio to file with specific parameters for speech recognition
-        audio_clip.write_audiofile(
-            str(output_path),
-            fps=16000,  # 16kHz sample rate for speech recognition
-            nbytes=2,   # 16-bit audio
-            codec='pcm_s16le',  # WAV format
-            logger=None  # Suppress MoviePy logs
+        """Save YouTube-specific project metadata"""
+        super()._save_project_metadata(
+            project_dir, 
+            project_id, 
+            youtube_url=url,
+            resolution=resolution,
+            video_file=video_file,
+            thumbnail_file=thumbnail_file
         )
-        
-        # Clean up
-        audio_clip.close()
-        video_clip.close()
-        
-        if output_path.exists():
-            logger.info(f"Audio extracted successfully using MoviePy: {output_path}")
-            return str(output_path)
-        else:
-            raise Exception("Audio file not found after extraction")

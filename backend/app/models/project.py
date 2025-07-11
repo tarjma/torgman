@@ -37,4 +37,4 @@ class CaptionData(BaseModel):
     end: float
     text: str
     confidence: Optional[float] = None
-    language: str = "ar"
+    translation: Optional[str] = None
