@@ -2,15 +2,6 @@
 
 A simple yet powerful application for generating and editing Arabic subtitles for video content. Transform your videos with accurate transcription and AI-powered Arabic translation.
 
-## What It Does
-
-Torgman helps you create professional Arabic subtitles by:
-- **Automatically transcribing** video audio using OpenAI Whisper
-- **Translating subtitles** to Arabic using AI (Gemini 2.5 Flash)
-- **Processing YouTube videos** directly from URLs
-- **Providing an intuitive editor** for subtitle refinement
-- **Exporting subtitles** in multiple formats (SRT, VTT, etc.)
-
 ## Quick Start
 
 ### Using Docker (Recommended)
@@ -78,13 +69,6 @@ We welcome contributions! Here's how to help:
 ## License
 
 This project is licensed under the GPL v3 License - see the `LICENSE` file for details.
-
-## Acknowledgments
-
-- **OpenAI Whisper** for exceptional speech recognition
-- **Google Gemini** for high-quality Arabic translation
-- **yt-dlp** community for YouTube processing capabilities
-- **spaCy** team for natural language processing tools
 
 ---
 
