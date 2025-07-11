@@ -5,29 +5,29 @@ A tool that aims to be a central hub for any translation project anyone wants to
    <img width="842" height="614" alt="Torgman GIF" src="https://github.com/user-attachments/assets/15093291-bf4e-4f02-85be-5a7e427abd6d" />
 </center>
 
-## ⚡ Quick Start
+## ⚡ How to start ?
 
-### 🐳 Using Docker (Recommended)
+Just, Run this single command 😅
 
-1. **📁 Clone the repository**
-   ```bash
-   git clone https://github.com/MohamedAliRashad/torgman.git
-   cd torgman
-   ```
+```bash
+docker run \
+    -v ./data:/app/data \
+    -p 8000:8000 \
+    --gpus all \
+    --name torgman \
+    ghcr.io/mohamedalirashad/torgman:latest
+```
 
-2. **🔑 Set up environment variables**
-   ```bash
-   # Create .env file with your API key
-   echo "GEMINI_API_KEY=your_gemini_api_key_here" > .env
-   ```
+Once the container is running, open your browser and navigate to:
+**🌐 http://localhost:8000**
 
-3. **🏃 Run with Docker**
-   ```bash
-   docker build -t torgman .
-   docker run --env-file .env -v ./data:/app/data -p 8000:8000 --gpus all --name torgman torgman
-   ```
+### 🔧 Configuration Options
 
-4. **🌐 Open your browser** and go to `http://localhost:8000`
+You can customize the setup by modifying the Docker command:
+
+- **📁 Data directory**: Change `./data` to your preferred storage location (You can remove this if you don't want persistent memory for your projects)
+- **🌐 Port**: Change `8000:8000` to use a different port (e.g., `3000:8000`)
+- **🎮 GPU**: Remove `--gpus all` if you don't have GPU support
 
 ## 📖 How to Use
 
