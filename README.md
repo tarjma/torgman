@@ -57,14 +57,6 @@ Torgman helps you create professional Arabic subtitles by:
 
 ## Configuration
 
-### AI Translation Settings
-
-The app uses Google's Gemini 2.5 Flash model by default. To customize:
-
-1. **Edit translation service** in `backend/app/services/translation_service.py`
-2. **Modify subtitle formatting** in `data/config/subtitle-config.json`
-3. **Adjust transcription parameters** in the transcription service
-
 ### Subtitle Formatting
 
 Default settings follow Netflix standards:
