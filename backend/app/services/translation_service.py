@@ -2,7 +2,6 @@ import json
 import logging
 from typing import List
 
-import ollama
 from pydantic import BaseModel
 from ..models import CaptionData
 from google import genai
@@ -17,7 +16,7 @@ class TranslationGenerator:
         self.model_name = model_name
 
     def translate_caption(self, caption: str) -> str:
-        """Translate the transcription to the Arabic language using Ollama"""
+        """Translate the transcription to the Arabic language using Google Gemini"""
         logger.info(f"Translating caption: {caption}")
         response = self.client.models.generate_content(
             model="gemini-2.5-flash", contents="Translate this caption to Arabic (Write nothing except the translation): " + caption,
@@ -26,20 +25,6 @@ class TranslationGenerator:
         logger.info(f"Translated caption: {translated_text}")
         return translated_text
         
-        # response = ollama.chat(
-        #     model=self.model_name,
-        #     messages=[
-        #         {"role": "system", "content": "You are a smart Arabic translator."},
-        #         {
-        #             "role": "user",
-        #             "content": f"Translate this caption to Arabic (Write nothing except the translation): {caption}",
-        #         },
-        #     ],
-        # )
-        # translated_text = response["message"]["content"].strip()
-        # logger.info(f"Translated caption: {translated_text}")
-        # return translated_text
-
     def translate_transcription(self, transcription: List[CaptionData]) -> List[CaptionData]:
         """Translate the entire transcription to Arabic"""
         logger.info("Translating transcription to Arabic")

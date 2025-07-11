@@ -5,7 +5,6 @@ pydantic-settings
 aiosqlite
 yt-dlp
 colorama
-ollama
 sqlalchemy
 python-multipart
 openai-whisper
