@@ -17,7 +17,7 @@ Torgman helps you create professional Arabic subtitles by:
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/MohamedAliRashad/torgman.git
    cd torgman
    ```
 
@@ -55,30 +55,6 @@ Torgman helps you create professional Arabic subtitles by:
    - Preview changes in real-time
 3. **Export your subtitles** when satisfied
 
-### Keyboard Shortcuts
-
-- `Space` - Play/Pause video
-- `←/→` - Navigate between subtitles
-- `Enter` - Edit selected subtitle
-- `Esc` - Exit edit mode
-
-## Features
-
-### Core Functionality
-- **Multi-format video support** (MP4, AVI, MOV, WebM)
-- **YouTube video processing** with automatic download
-- **High-quality transcription** using Whisper Turbo model
-- **AI-powered Arabic translation** with context awareness
-- **Real-time subtitle editing** with instant preview
-- **Multiple export formats** (SRT, VTT)
-
-### Technical Features
-- **WebSocket-based real-time updates** during processing
-- **Project management** with metadata persistence
-- **Thumbnail generation** for easy project identification
-- **SQLite database** for reliable data storage
-- **Responsive web interface** with Arabic RTL support
-
 ## Configuration
 
 ### AI Translation Settings
@@ -96,37 +72,6 @@ Default settings follow Netflix standards:
 - **Maximum 2 lines per caption**
 - **Maximum 7 seconds duration**
 - **21 characters per second reading speed**
-
-## API Endpoints
-
-The backend provides a RESTful API:
-
-- `GET /api/projects` - List all projects
-- `POST /api/projects` - Create new project
-- `GET /api/projects/{id}` - Get project details
-- `DELETE /api/projects/{id}` - Delete project
-- `POST /api/youtube/info` - Get YouTube video info
-- `WebSocket /ws` - Real-time updates
-
-## System Requirements
-
-### Minimum Requirements
-- **RAM**: 4GB (8GB recommended for large videos)
-- **Storage**: 2GB free space
-- **Python**: 3.11 or higher
-- **Node.js**: 18 or higher
-
-### Dependencies
-- **FFmpeg** (for video processing)
-- **OpenAI Whisper** (for transcription)
-- **spaCy** (for text processing)
-- **yt-dlp** (for YouTube downloads)
-
-### Performance Tips
-
-- **Use Whisper 'base' model** for faster processing on slower machines
-- **Process shorter videos** (under 30 minutes) for optimal performance
-- **Close other applications** during video processing to free up RAM
 
 ## Contributing
 
