@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize, SkipBack, SkipForward, Settings, Subtitles } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, SkipBack, SkipForward, Settings, Subtitles, Gauge } from 'lucide-react';
 import { Subtitle } from '../types';
 import { formatTime } from '../utils/exportUtils';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
@@ -12,6 +12,7 @@ interface VideoPlayerProps {
   currentTime: number;
   onTimeUpdate: (time: number) => void;
   onDurationChange?: (duration: number) => void;
+  onFullscreen?: () => void;
 }
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -20,7 +21,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   subtitles,
   currentTime,
   onTimeUpdate,
-  onDurationChange
+  onDurationChange,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -133,14 +134,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   );
 
   const toggleFullscreen = useCallback(() => {
-    if (videoRef.current) {
+    if (containerRef.current) {
       if (document.fullscreenElement) {
         document.exitFullscreen();
       } else {
-        videoRef.current.requestFullscreen();
+        containerRef.current.requestFullscreen().catch((err) => {
+          console.error('Error attempting to enable fullscreen:', err);
+        });
       }
     }
   }, []);
+
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -194,8 +199,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [togglePlay, skipTime, handleVolumeChange, volume, toggleMute, showSubtitles, toggleFullscreen]);
 
   return (
-    <div className="bg-black h-full flex flex-col rounded-lg overflow-hidden">
-      <div className="relative flex-1">
+    <div ref={containerRef} className="bg-black h-full flex flex-col">
+      {/* Video Area - Takes available space minus controls */}
+      <div className="relative flex-1 min-h-0">
         <video
           ref={videoRef}
           src={videoUrl}
@@ -209,7 +215,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         {/* Subtitle Overlay */}
         {showSubtitles && currentSubtitle && (
           <div 
-            className={`absolute transition-opacity duration-300 ${
+            className={`absolute z-0 transition-opacity duration-300 ${
               subtitleConfig.position === 'top-center' ? 'top-0' :
               subtitleConfig.position === 'center' ? 'top-1/2 -translate-y-1/2' :
               'bottom-0'
@@ -251,7 +257,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
         {/* Play/Pause Overlay */}
         <div 
-          className="absolute inset-0 flex items-center justify-center cursor-pointer group"
+          className="absolute inset-0 flex items-center justify-center cursor-pointer group z-0"
           onClick={togglePlay}
         >
           <div className={`bg-black bg-opacity-50 rounded-full p-4 transition-opacity ${
@@ -266,8 +272,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </div>
       </div>
 
-      {/* Video Controls */}
-      <div className="bg-gradient-to-t from-black via-black/80 to-transparent p-6 space-y-4" dir="ltr">
+      {/* Video Controls - Fixed height, always visible */}
+      <div className="bg-black p-4 space-y-3 z-10 relative border-t border-gray-600 flex-shrink-0" dir="ltr">
         {/* Progress Bar */}
         <div 
           ref={progressRef}
@@ -286,32 +292,32 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
         {/* Control Buttons */}
         <div className="flex items-center justify-between text-white">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <button
               onClick={() => skipTime(-10)}
-              className="p-3 hover:bg-white/20 rounded-full transition-all duration-200 group"
+              className="p-2 hover:bg-white/20 rounded-lg transition-all duration-200 group"
               title="ترجع 10 ثوان"
             >
-              <SkipBack className="w-6 h-6 group-hover:scale-110 transition-transform" />
+              <SkipBack className="w-5 h-5 group-hover:scale-110 transition-transform" />
             </button>
             
             <button
               onClick={togglePlay}
-              className="p-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 rounded-full transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+              className="p-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 rounded-full transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
             >
-              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
+              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
             </button>
             
             <button
               onClick={() => skipTime(10)}
-              className="p-3 hover:bg-white/20 rounded-full transition-all duration-200 group"
+              className="p-2 hover:bg-white/20 rounded-lg transition-all duration-200 group"
               title="تقدم 10 ثوان"
             >
-              <SkipForward className="w-6 h-6 group-hover:scale-110 transition-transform" />
+              <SkipForward className="w-5 h-5 group-hover:scale-110 transition-transform" />
             </button>
           </div>
 
-          <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-4">
             <div className="text-sm font-mono text-gray-300 bg-black/30 px-3 py-1 rounded-full">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
@@ -320,10 +326,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <div className="relative">
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className="p-3 hover:bg-white/20 rounded-full transition-all duration-200"
+                className="p-2 hover:bg-white/20 rounded-lg transition-all duration-200"
                 title="إعدادات السرعة"
               >
-                <Settings className="w-5 h-5" />
+                <Gauge className="w-4 h-4" />
               </button>
               {showSettings && (
                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 bg-black/90 backdrop-blur-sm rounded-xl p-4 min-w-[140px] shadow-xl border border-white/10">
@@ -348,13 +354,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             </div>
             
             {/* Volume Control */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
               <button 
                 onClick={toggleMute} 
-                className="p-3 hover:bg-white/20 rounded-full transition-all duration-200"
+                className="p-2 hover:bg-white/20 rounded-lg transition-all duration-200"
                 title={isMuted ? 'إلغاء الكتم' : 'كتم الصوت'}
               >
-                {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
               <input
                 type="range"
@@ -363,21 +369,21 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                className="w-24 accent-blue-500 h-1 bg-white/20 rounded-lg appearance-none slider"
+                className="w-20 accent-blue-500 h-1 bg-white/20 rounded-lg appearance-none slider"
               />
             </div>
             
             {/* Subtitle Toggle */}
             <button
               onClick={() => setShowSubtitles(!showSubtitles)}
-              className={`p-3 rounded-full transition-all duration-200 relative ${
+              className={`p-2 rounded-lg transition-all duration-200 relative ${
                 showSubtitles ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-white/20'
               }`}
               title={`${showSubtitles ? 'إخفاء' : 'إظهار'} الترجمات (${subtitles.length})`}
             >
-              <Subtitles className="w-5 h-5" />
+              <Subtitles className="w-4 h-4" />
               {subtitles.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold text-[10px]">
                   {subtitles.length}
                 </span>
               )}
@@ -386,18 +392,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             {/* Subtitle Configuration */}
             <button
               onClick={() => setShowSubtitleConfig(true)}
-              className="p-3 hover:bg-white/20 rounded-full transition-all duration-200"
+              className="p-2 hover:bg-white/20 rounded-lg transition-all duration-200"
               title="إعدادات الترجمة"
             >
-              <Settings className="w-5 h-5" />
+              <Settings className="w-4 h-4" />
             </button>
             
             <button
               onClick={toggleFullscreen}
-              className="p-3 hover:bg-white/20 rounded-full transition-all duration-200"
+              className="p-2 hover:bg-white/20 rounded-lg transition-all duration-200"
               title="ملء الشاشة"
             >
-              <Maximize className="w-5 h-5" />
+              <Maximize className="w-4 h-4" />
             </button>
           </div>
         </div>

@@ -20,8 +20,22 @@ class Settings(BaseSettings):
     cors_methods: list = ["*"]
     cors_headers: list = ["*"]
     
-    # Static files
-    static_dir: Path = base_dir / "static"  # Static files (e.g., favicon, images)
+    # Static files - handle both development and production
+    @property
+    def static_dir(self) -> Path:
+        """Get static directory based on environment"""
+        # In production (Docker), static files are copied to /app/static
+        prod_static = self.base_dir / "static"
+        if prod_static.exists() and (prod_static / "index.html").exists():
+            return prod_static
+        
+        # In development, look for frontend build directory
+        dev_static = self.base_dir / "frontend" / "dist"
+        if dev_static.exists() and (dev_static / "index.html").exists():
+            return dev_static
+            
+        # Fallback to production path (will be created if needed)
+        return prod_static
     
     def get_project_dir(self, project_id: str) -> Path:
         """Get the directory path for a specific project"""
@@ -43,4 +57,4 @@ settings.data_dir.mkdir(parents=True, exist_ok=True)
 settings.database_path.parent.mkdir(parents=True, exist_ok=True)
 settings.projects_dir.mkdir(parents=True, exist_ok=True)
 settings.config_dir.mkdir(parents=True, exist_ok=True)
-settings.static_dir.mkdir(parents=True, exist_ok=True)
+# Note: static_dir is now a property, so we ensure it exists when accessed
