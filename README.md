@@ -1,4 +1,4 @@
-# Torgman (ترجمان)
+# Torgman (تُرجمان)
 
 A tool that aims to be a central hub for any translation project anyone wants to do 👳
 <center>
@@ -15,7 +15,7 @@ docker run \
     -p 8000:8000 \
     --gpus all \
     --name torgman \
-    ghcr.io/mohamedalirashad/torgman:latest
+    ghcr.io/tarjma/torgman:latest
 ```
 
 Once the container is running, open your browser and navigate to:
