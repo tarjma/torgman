@@ -58,7 +58,7 @@ class TranslationGenerator:
             translation: str
 
         transcription_str = json.dumps([caption.dict() for caption in transcription])
-        prompt = "This is the transcription of a video. Please translate it to Arabic.\n\n" + transcription_str
+        prompt = "This is the transcription of a video. Please translate it to Arabic. (Maintain new lines in every caption to make the final subtitle reading experience nicer) \n\n" + transcription_str
         response = self.client.models.generate_content(
             model="gemini-2.5-pro",
             contents=prompt,

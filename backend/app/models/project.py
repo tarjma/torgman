@@ -38,3 +38,4 @@ class CaptionData(BaseModel):
     text: str
     confidence: Optional[float] = None
     translation: Optional[str] = None
+    styling: Optional[dict] = None  # Frontend styling information

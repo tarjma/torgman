@@ -8,6 +8,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import IntegratedSubtitlePanel from '../components/IntegratedSubtitlePanel';
 import VideoPlayerHeader from '../components/VideoPlayerHeader';
 import GlobalSubtitleSettings from '../components/GlobalSubtitleSettings';
+import VideoExportModal from '../components/VideoExportModal';
 
 // Hooks
 import { useProjects } from '../hooks/useProjects';
@@ -17,6 +18,7 @@ import { useAITranslation } from '../hooks/useAITranslation';
 import { useProjectStatusUpdates } from '../hooks/useProjectStatusUpdates';
 import { useProjectSubtitleUpdates } from '../hooks/useProjectSubtitleUpdates';
 import { useSubtitlePolling } from '../hooks/useSubtitlePolling';
+import { useAutoSave } from '../hooks/useAutoSave';
 
 // Services
 import { projectService } from '../services/projectService';
@@ -34,6 +36,7 @@ const ProjectEditorPage = () => {
   
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
+  const [showVideoExportModal, setShowVideoExportModal] = useState(false);
   const [translationStatus, setTranslationStatus] = useState<{ status: string; message: string; progress?: number } | null>(null);
   const [project, setProject] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -234,10 +237,22 @@ const ProjectEditorPage = () => {
   }, [projectId, projects, projectsLoading, navigate, loadSubtitles, setVideoInfo]);
 
   // Auto-save functionality
-  const triggerAutoSave = useCallback(() => {
-    setIsAutoSaving(true);
-    setTimeout(() => setIsAutoSaving(false), 1000);
-  }, []);
+  const { triggerAutoSave, saveNow } = useAutoSave({
+    projectId,
+    subtitles,
+    onSaveStart: () => {
+      setIsAutoSaving(true);
+    },
+    onSaveComplete: () => {
+      setTimeout(() => setIsAutoSaving(false), 1000); // Show saved indicator for 1 second
+    },
+    onSaveError: (error) => {
+      setIsAutoSaving(false);
+      console.error('Auto-save error:', error);
+      // Optionally show error notification to user
+    },
+    debounceMs: 2000 // Save 2 seconds after last edit
+  });
 
   // Keyboard shortcuts
   useHotkeys('space', (e) => {
@@ -247,6 +262,9 @@ const ProjectEditorPage = () => {
   useHotkeys('ctrl+s', (e) => {
     e.preventDefault();
     triggerAutoSave();
+    if (saveNow) {
+      saveNow(); // Immediate save on Ctrl+S
+    }
   });
 
   useHotkeys('ctrl+n', (e) => {
@@ -303,6 +321,14 @@ const ProjectEditorPage = () => {
     
     downloadFile(content, filename, mimeType);
   }, [subtitles, videoInfo]);
+
+  const handleVideoExport = useCallback(() => {
+    if (subtitles.length === 0) {
+      alert('لا توجد ترجمات لإضافتها إلى الفيديو');
+      return;
+    }
+    setShowVideoExportModal(true);
+  }, [subtitles]);
 
   // Auto-update active subtitle based on current time
   const handleTimeUpdate = useCallback((time: number) => {
@@ -396,6 +422,7 @@ const ProjectEditorPage = () => {
           onBackToHome={handleBackToHome}
           onShowGlobalSettings={() => setShowGlobalSettings(true)}
           onExport={handleExportSubtitles}
+          onVideoExport={handleVideoExport}
         />
       </div>
       
@@ -425,6 +452,7 @@ const ProjectEditorPage = () => {
             onSeekToSubtitle={handleSeekToSubtitle}
             isTranslating={isTranslating}
             isAutoSaving={isAutoSaving}
+            onTriggerAutoSave={triggerAutoSave}
           />
         </div>
 
@@ -446,6 +474,17 @@ const ProjectEditorPage = () => {
         isOpen={showGlobalSettings}
         onClose={() => setShowGlobalSettings(false)}
       />
+
+      {/* Video Export Modal */}
+      {projectId && (
+        <VideoExportModal
+          isOpen={showVideoExportModal}
+          onClose={() => setShowVideoExportModal(false)}
+          projectId={projectId}
+          projectTitle={project?.title || videoInfo.title || 'مشروع جديد'}
+          subtitles={subtitles}
+        />
+      )}
     </div>
   );
 };

@@ -1,7 +1,8 @@
 import asyncio
+import json
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -298,3 +299,85 @@ async def translate_text(text: str):
         "original": text,
         "translated": translated_text
     }
+
+@router.put("/{project_id}/subtitles/{subtitle_index}")
+async def update_subtitle_text(project_id: str, subtitle_index: int, text: str, translation: str = None):
+    """Update individual subtitle text and translation"""
+    db = await get_database()
+    # Check if project exists
+    project = await db.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get current subtitles
+    subtitles = db.get_project_subtitles(project_id)
+    if not subtitles or subtitle_index >= len(subtitles):
+        raise HTTPException(status_code=404, detail="Subtitle not found")
+    
+    # Update the subtitle
+    subtitles[subtitle_index].text = text
+    if translation is not None:
+        subtitles[subtitle_index].translation = translation
+    
+    # Save back to file
+    project_dir = settings.get_project_dir(project_id)
+    subtitles_path = project_dir / "subtitles.json"
+    
+    # Convert to dict format for JSON serialization
+    subtitles_dict = [subtitle.dict() for subtitle in subtitles]
+    
+    with open(subtitles_path, 'w', encoding='utf-8') as f:
+        json.dump(subtitles_dict, f, indent=2, ensure_ascii=False)
+    
+    logger.info(f"Updated subtitle {subtitle_index} for project {project_id}")
+    
+    # Broadcast update via WebSocket
+    websocket_message = {
+        "project_id": project_id,
+        "type": "subtitle_updated",
+        "data": {
+            "index": subtitle_index,
+            "text": text,
+            "translation": translation
+        }
+    }
+    await websocket_manager.send_to_project(project_id, websocket_message)
+    
+    return {"message": "Subtitle updated successfully"}
+
+@router.put("/{project_id}/subtitles")
+async def update_project_subtitles(project_id: str, subtitles_data: List[Dict]):
+    """Update all project subtitles"""
+    db = await get_database()
+    # Check if project exists
+    project = await db.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Save subtitles to file
+    project_dir = settings.get_project_dir(project_id)
+    subtitles_path = project_dir / "subtitles.json"
+    
+    # Convert input data to CaptionData format and save
+    subtitles_list = []
+    for sub_data in subtitles_data:
+        caption = CaptionData(
+            start=sub_data.get("start", sub_data.get("start_time", 0)),
+            end=sub_data.get("end", sub_data.get("end_time", 0)),
+            text=sub_data.get("text", ""),
+            confidence=sub_data.get("confidence", 1.0),
+            translation=sub_data.get("translation", sub_data.get("translatedText"))
+        )
+        subtitles_list.append(caption)
+    
+    # Save to JSON file
+    subtitles_dict = [subtitle.dict() for subtitle in subtitles_list]
+    with open(subtitles_path, 'w', encoding='utf-8') as f:
+        json.dump(subtitles_dict, f, indent=2, ensure_ascii=False)
+    
+    logger.info(f"Updated all subtitles for project {project_id} - {len(subtitles_list)} subtitles")
+    
+    # Update project status
+    await db.update_project_status(project_id, "completed", len(subtitles_list))
+    
+    return {"message": "All subtitles updated successfully", "count": len(subtitles_list)}

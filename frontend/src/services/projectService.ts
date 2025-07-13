@@ -40,6 +40,20 @@ export const projectService = {
     return response.data;
   },
 
+  async updateProjectSubtitles(projectId: string, subtitles: any[]): Promise<void> {
+    await apiClient.put(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/subtitles`, subtitles);
+  },
+
+  async updateSubtitleText(projectId: string, subtitleIndex: number, text: string, translation?: string): Promise<void> {
+    const params = new URLSearchParams();
+    params.append('text', text);
+    if (translation !== undefined) {
+      params.append('translation', translation);
+    }
+    
+    await apiClient.put(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/subtitles/${subtitleIndex}?${params.toString()}`);
+  },
+
   async deleteProject(projectId: string): Promise<void> {
     await apiClient.delete(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}`);
   },
@@ -112,4 +126,54 @@ export const projectService = {
       return '';
     }
   },
+
+  async translateProjectSubtitles(projectId: string): Promise<void> {
+    await apiClient.post(`/api/projects/${projectId}/translate`);
+  },
+
+  async exportVideoWithSubtitles(
+    projectId: string, 
+    options: {
+      subtitleStyle?: any;
+      outputFormat?: string;
+      outputQuality?: string;
+    } = {}
+  ): Promise<{
+    message: string;
+    output_file: string;
+    file_size: number;
+    format: string;
+    quality: string;
+  }> {
+    const response = await apiClient.post(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/export`, {
+      subtitle_style: options.subtitleStyle,
+      output_format: options.outputFormat || 'mp4',
+      output_quality: options.outputQuality || '720p'
+    });
+    return response.data;
+  },
+
+  async downloadExportedVideo(projectId: string, filename: string): Promise<string> {
+    const response = await apiClient.get(
+      `${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/export/${filename}`,
+      { responseType: 'blob' }
+    );
+    
+    // Create download URL
+    const blob = new Blob([response.data]);
+    const url = window.URL.createObjectURL(blob);
+    
+    // Trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up
+    window.URL.revokeObjectURL(url);
+    
+    return filename;
+  }
 };

@@ -19,6 +19,7 @@ interface IntegratedSubtitlePanelProps {
   onSeekToSubtitle: (startTime: number, subtitleId: string) => void;
   isTranslating: boolean;
   isAutoSaving: boolean;
+  onTriggerAutoSave?: () => void;
 }
 
 const ARABIC_FONTS = [
@@ -44,7 +45,8 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
   onTranslateText,
   onSeekToSubtitle,
   isTranslating,
-  isAutoSaving
+  isAutoSaving,
+  onTriggerAutoSave
 }) => {
   console.log('IntegratedSubtitlePanel received subtitles:', subtitles);
   console.log('Subtitles count:', subtitles.length);
@@ -117,14 +119,24 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
       updates.text = value; // Keep text field in sync with originalText
     }
     onUpdateSubtitle(id, updates);
-  }, [onUpdateSubtitle]);
+    
+    // Trigger auto-save after text change
+    if (onTriggerAutoSave) {
+      onTriggerAutoSave();
+    }
+  }, [onUpdateSubtitle, onTriggerAutoSave]);
 
   const handleTimeChange = useCallback((id: string, field: 'start_time' | 'end_time', value: string) => {
     const timeValue = parseFloat(value);
     if (!isNaN(timeValue)) {
       onUpdateSubtitle(id, { [field]: timeValue });
+      
+      // Trigger auto-save after time change
+      if (onTriggerAutoSave) {
+        onTriggerAutoSave();
+      }
     }
-  }, [onUpdateSubtitle]);
+  }, [onUpdateSubtitle, onTriggerAutoSave]);
 
   const handleStyleChange = useCallback((id: string, updates: any) => {
     const subtitle = subtitles.find(s => s.id === id);
@@ -135,8 +147,13 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
           ...updates 
         } 
       });
+      
+      // Trigger auto-save after style change
+      if (onTriggerAutoSave) {
+        onTriggerAutoSave();
+      }
     }
-  }, [subtitles, onUpdateSubtitle]);
+  }, [subtitles, onUpdateSubtitle, onTriggerAutoSave]);
 
   const handleAutoTranslate = useCallback(async (subtitle: Subtitle) => {
     if (subtitle.text || subtitle.originalText) {
@@ -259,7 +276,7 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
             {isAutoSaving && (
               <div className="flex items-center gap-2 text-xs bg-white/20 px-3 py-1 rounded-full">
                 <Save className="w-3 h-3 animate-pulse" />
-                <span>حفظ تلقائي</span>
+                <span>حفظ تلقائي...</span>
               </div>
             )}
             
@@ -454,7 +471,9 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
                       <textarea
                         value={subtitle.text || subtitle.originalText || ''}
                         onChange={(e) => handleTextChange(subtitle.id, 'originalText', e.target.value)}
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        className={`w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                          isAutoSaving ? 'bg-green-50 border-green-300' : ''
+                        }`}
                         rows={2}
                         placeholder="النص الأصلي..."
                         dir="ltr"
@@ -467,7 +486,9 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
                       <textarea
                         value={subtitle.translatedText}
                         onChange={(e) => handleTextChange(subtitle.id, 'translatedText', e.target.value)}
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        className={`w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                          isAutoSaving ? 'bg-green-50 border-green-300' : ''
+                        }`}
                         rows={2}
                         placeholder="الترجمة العربية..."
                         dir="rtl"
