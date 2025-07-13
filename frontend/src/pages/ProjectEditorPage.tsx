@@ -8,7 +8,6 @@ import VideoPlayer from '../components/VideoPlayer';
 import IntegratedSubtitlePanel from '../components/IntegratedSubtitlePanel';
 import VideoPlayerHeader from '../components/VideoPlayerHeader';
 import GlobalSubtitleSettings from '../components/GlobalSubtitleSettings';
-import VideoExportModal from '../components/VideoExportModal';
 
 // Hooks
 import { useProjects } from '../hooks/useProjects';
@@ -36,7 +35,6 @@ const ProjectEditorPage = () => {
   
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
-  const [showVideoExportModal, setShowVideoExportModal] = useState(false);
   const [translationStatus, setTranslationStatus] = useState<{ status: string; message: string; progress?: number } | null>(null);
   const [project, setProject] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -322,14 +320,6 @@ const ProjectEditorPage = () => {
     downloadFile(content, filename, mimeType);
   }, [subtitles, videoInfo]);
 
-  const handleVideoExport = useCallback(() => {
-    if (subtitles.length === 0) {
-      alert('لا توجد ترجمات لإضافتها إلى الفيديو');
-      return;
-    }
-    setShowVideoExportModal(true);
-  }, [subtitles]);
-
   // Auto-update active subtitle based on current time
   const handleTimeUpdate = useCallback((time: number) => {
     setCurrentTime(time);
@@ -422,7 +412,6 @@ const ProjectEditorPage = () => {
           onBackToHome={handleBackToHome}
           onShowGlobalSettings={() => setShowGlobalSettings(true)}
           onExport={handleExportSubtitles}
-          onVideoExport={handleVideoExport}
         />
       </div>
       
@@ -475,16 +464,6 @@ const ProjectEditorPage = () => {
         onClose={() => setShowGlobalSettings(false)}
       />
 
-      {/* Video Export Modal */}
-      {projectId && (
-        <VideoExportModal
-          isOpen={showVideoExportModal}
-          onClose={() => setShowVideoExportModal(false)}
-          projectId={projectId}
-          projectTitle={project?.title || videoInfo.title || 'مشروع جديد'}
-          subtitles={subtitles}
-        />
-      )}
     </div>
   );
 };
