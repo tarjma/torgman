@@ -20,6 +20,9 @@ class TranslationGenerator:
         
         # The client gets the API key from environment or config
         self.client = genai.Client(api_key=api_key)
+
+        # Maximum characters per line for captions
+        self.max_chars_per_line = 40
     
     def _get_api_key(self) -> str:
         """Get API key from environment variable or user config file"""
@@ -41,13 +44,52 @@ class TranslationGenerator:
     
         return None
 
+    def format_multiline_caption(self, text: str) -> List[str]:
+        """
+        Formats text into one or two lines, prioritizing an inverted pyramid shape.
+        """
+        if len(text) <= self.max_chars_per_line:
+            return [text]
+
+        words = text.split()
+        possible_splits = []
+        for i in range(1, len(words)):
+            line1 = " ".join(words[:i])
+            line2 = " ".join(words[i:])
+            if len(line1) <= self.max_chars_per_line and len(line2) <= self.max_chars_per_line:
+                possible_splits.append((line1, line2))
+
+        if not possible_splits:
+            # Fallback if no valid split found, do a hard wrap
+            mid_point = text.rfind(' ', 0, self.max_chars_per_line)
+            if mid_point == -1:
+                return [text[:self.max_chars_per_line], text[self.max_chars_per_line:].strip()]
+            return [text[:mid_point], text[mid_point:].strip()]
+
+        # **CRITICAL BUG FIX**: Score splits to prefer inverted pyramids
+        best_split = None
+        # Score is a tuple: (is_top_heavy, length_difference). Lower is better.
+        best_score = (True, float('inf')) 
+
+        for line1, line2 in possible_splits:
+            is_top_heavy = len(line1) > len(line2)
+            length_difference = abs(len(line1) - len(line2))
+            score = (is_top_heavy, length_difference)
+            
+            if score < best_score:
+                best_score = score
+                best_split = (line1, line2)
+                
+        return list(best_split)
+    
     def translate_caption(self, caption: str) -> str:
         """Translate the transcription to the Arabic language using Google Gemini"""
         logger.info(f"Translating caption: {caption}")
         response = self.client.models.generate_content(
             model="gemini-2.5-flash", contents="Translate this caption to Arabic (Write nothing except the translation): " + caption,
         )
-        translated_text = response.text.strip()
+        translated_text = response.text.replace("\n", " ").strip()
+        translated_text = "\n".join(self.format_multiline_caption(translated_text))
         logger.info(f"Translated caption: {translated_text}")
         return translated_text
         
@@ -57,8 +99,8 @@ class TranslationGenerator:
         class TranslatedCaption(BaseModel):
             translation: str
 
-        transcription_str = json.dumps([caption.dict() for caption in transcription])
-        prompt = "This is the transcription of a video. Please translate it to Arabic. (Maintain new lines in every caption to make the final subtitle reading experience nicer) \n\n" + transcription_str
+        transcription_str = json.dumps([{"start": caption.start, "end": caption.end, "text": caption.text} for caption in transcription])
+        prompt = "This is the transcription of a video. Please translate it into Arabic.\n\n" + transcription_str
         response = self.client.models.generate_content(
             model="gemini-2.5-pro",
             contents=prompt,
@@ -69,7 +111,8 @@ class TranslationGenerator:
         )
         translations: List[TranslatedCaption] = response.parsed
         for idx in range(len(transcription)):
-            transcription[idx].translation = translations[idx].translation
+            translation_text = translations[idx].translation.replace("\n", " ").strip()
+            transcription[idx].translation = "\n".join(self.format_multiline_caption(translation_text))
             logger.info(f"Translation for segment {idx}: {transcription[idx].translation}")
         return transcription
 
