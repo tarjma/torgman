@@ -6,13 +6,15 @@ from typing import List, Dict
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from moviepy import VideoFileClip
+import ffmpeg
 
 from ..core.config import settings
 from ..core.database import get_database
 from ..models.project import CaptionData, ProjectData
 from ..services.translation_service import TranslationGenerator
+from ..services.export_service import ExportService
 from .websocket import manager as websocket_manager
+from .config import SubtitleConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -102,10 +104,20 @@ async def upload_project_file(
         content = await file.read()
         buffer.write(content)
     
-    # Get video duration (basic approach)
-    with VideoFileClip(str(file_path)) as video_clip:
-        # Use moviepy to get the duration in seconds
-        duration = int(video_clip.duration)
+    # Get video duration using ffmpeg probe
+    try:
+        probe = ffmpeg.probe(str(file_path))
+        duration = float(probe['format']['duration'])
+        logger.info(f"Video duration extracted using ffmpeg: {duration} seconds")
+    except ffmpeg.Error as e:
+        error_message = e.stderr.decode() if e.stderr else str(e)
+        logger.error(f"ffmpeg duration extraction failed: {error_message}")
+        # Set default duration if extraction fails
+        duration = 0
+        logger.warning("Using default duration (0) due to extraction failure")
+    except Exception as e:
+        logger.error(f"Unexpected error during duration extraction: {e}")
+        duration = 0
 
     # Create project in database
     db = await get_database()
@@ -242,49 +254,57 @@ async def translate_project_subtitles(project_id: str):
 async def translate_project_background(project_id: str, subtitles):
     """Background task to translate project subtitles"""
     # Send status update that translation started
-    await websocket_manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "status",
-        "status": "translating",
-        "message": "Translation in progress..."
-    })
-    
-    # Translate subtitles
-    translation_generator = TranslationGenerator()
-    translated_subtitles = translation_generator.translate_transcription(subtitles)
-    
-    # Save to project directory
-    project_dir = settings.get_project_dir(project_id)
-    translation_generator._save_subtitles(project_dir, translated_subtitles)
-    
-    # Broadcast subtitle updates via WebSocket
-    logger.info(f"Broadcasting subtitle updates for project {project_id} via WebSocket")
-    websocket_message = {
-        "project_id": project_id,
-        "type": "subtitles",
-        "data": [
-            {
-                "id": f"{project_id}_subtitle_{idx}",  # Generate consistent IDs
-                "start_time": subtitle.start,
-                "end_time": subtitle.end,
-                "text": subtitle.text,
-                "confidence": subtitle.confidence,
-                "translation": subtitle.translation
-            }
-            for idx, subtitle in enumerate(translated_subtitles)
-        ],
-        "message": "Subtitles translated successfully"
-    }
-    logger.info(f"Sending WebSocket message with {len(translated_subtitles)} subtitles")
-    await websocket_manager.send_to_project(project_id, websocket_message)
-    
-    # Send completion status
-    await websocket_manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "completion",
-        "status": "completed",
-        "message": f"Translation completed successfully! {len(translated_subtitles)} subtitles translated."
-    })
+    try:
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "status",
+            "status": "translating",
+            "message": "Translation in progress..."
+        })
+        
+        # Translate subtitles
+        translation_generator = TranslationGenerator()
+        translated_subtitles = translation_generator.translate_transcription(subtitles)
+        
+        # Save to project directory
+        project_dir = settings.get_project_dir(project_id)
+        translation_generator._save_subtitles(project_dir, translated_subtitles)
+        
+        # Broadcast subtitle updates via WebSocket
+        logger.info(f"Broadcasting subtitle updates for project {project_id} via WebSocket")
+        websocket_message = {
+            "project_id": project_id,
+            "type": "subtitles",
+            "data": [
+                {
+                    "id": f"{project_id}_subtitle_{idx}",  # Generate consistent IDs
+                    "start_time": subtitle.start,
+                    "end_time": subtitle.end,
+                    "text": subtitle.text,
+                    "confidence": subtitle.confidence,
+                    "translation": subtitle.translation
+                }
+                for idx, subtitle in enumerate(translated_subtitles)
+            ],
+            "message": "Subtitles translated successfully"
+        }
+        logger.info(f"Sending WebSocket message with {len(translated_subtitles)} subtitles")
+        await websocket_manager.send_to_project(project_id, websocket_message)
+        
+        # Send completion status
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "completion",
+            "status": "completed",
+            "message": f"Translation completed successfully! {len(translated_subtitles)} subtitles translated."
+        })
+    except Exception as e:
+        logger.error(f"Error during translation for project {project_id}: {e}")
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "error",
+            "message": f"Translation failed: {str(e)}"
+        })
 
 @router.post("/translate-text")
 async def translate_text(text: str):
@@ -381,3 +401,131 @@ async def update_project_subtitles(project_id: str, subtitles_data: List[Dict]):
     await db.update_project_status(project_id, "completed", len(subtitles_list))
     
     return {"message": "All subtitles updated successfully", "count": len(subtitles_list)}
+
+@router.post("/{project_id}/export")
+async def export_project_video(project_id: str, request: dict):
+    """
+    Export video with subtitles.
+    
+    Request body should include:
+    - export_format: "hard" (burned-in subtitles) or "soft" (separate track)
+    - subtitle_config: (optional) Subtitle styling configuration
+    """
+    db = await get_database()
+    project = await db.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get export format (default to hard)
+    export_format = request.get("export_format", "hard")
+    if export_format not in ["hard", "soft"]:
+        raise HTTPException(status_code=400, detail="Export format must be 'hard' or 'soft'")
+
+    # Parse subtitle configuration
+    subtitle_config = None
+    if "subtitle_config" in request:
+        try:
+            config_data = request["subtitle_config"]
+            subtitle_config = SubtitleConfig(**config_data)
+        except Exception as e:
+            logger.error(f"Invalid subtitle config provided: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid subtitle configuration: {str(e)}")
+
+    # Run export as background task
+    exporter = ExportService()
+    asyncio.create_task(run_export_task(project_id, exporter, export_format, subtitle_config))
+    
+    return {"message": "Video export started. You will be notified when it's complete."}
+
+async def run_export_task(project_id: str, exporter: ExportService, export_format: str, config: SubtitleConfig = None):
+    """Background task for video export."""
+    try:
+        # Notify frontend that export has started
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "export_status",
+            "status": "export_started",
+            "message": "Starting video export..."
+        })
+        
+        # Run the export
+        filename = await exporter.burn_subtitles(project_id, export_format, config)
+        logger.info(f"Export completed for project {project_id}: {filename}")
+        
+        # Get project directory to verify the file exists
+        project_dir = settings.get_project_dir(project_id)
+        file_path = project_dir / filename
+        file_size = file_path.stat().st_size if file_path.exists() else 0
+        
+        # Create the completion message
+        completion_message = {
+            "project_id": project_id,
+            "type": "export_status",
+            "status": "export_completed",
+            "message": "Video export completed successfully",
+            "progress": 100,
+            "data": {
+                "filename": filename,
+                "file_size": file_size,
+                "download_url": f"/api/projects/{project_id}/download-export/{filename}"
+            }
+        }
+        
+        logger.info(f"Sending export completion message: {completion_message}")
+        
+        # Notify frontend that export is complete
+        await websocket_manager.send_to_project(project_id, completion_message)
+    except Exception as e:
+        logger.error(f"Export task failed for project {project_id}: {e}")
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "export_status",
+            "status": "export_failed",
+            "message": f"Export failed: {str(e)}"
+        })
+
+@router.get("/{project_id}/download-export/{filename}")
+async def download_exported_video(project_id: str, filename: str):
+    """
+    Download the exported video file.
+    
+    The filename should be in the format: {project_id}_export.{mp4|mkv}
+    """
+    # Validate filename to prevent directory traversal
+    if not filename.startswith(project_id):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    project_dir = settings.get_project_dir(project_id)
+    file_path = project_dir / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Exported file not found. Please check if the export has completed.")
+    
+    # Get project to use its title for the download filename
+    db = await get_database()
+    project = await db.get_project(project_id)
+    
+    # Determine media type based on file extension
+    ext = file_path.suffix.lower()
+    if ext == '.mp4':
+        media_type = 'video/mp4'
+        download_ext = 'mp4'
+    elif ext == '.mkv':
+        media_type = 'video/x-matroska'
+        download_ext = 'mkv'
+    else:
+        media_type = 'video/mp4'
+        download_ext = 'mp4'
+    
+    # Create a nice download filename
+    project_title = project.title if project and project.title else project_id
+    download_filename = f"{project_title}_with_subtitles.{download_ext}"
+    
+    return FileResponse(
+        str(file_path),
+        media_type=media_type,
+        filename=download_filename,
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{download_filename}\""
+        }
+    )

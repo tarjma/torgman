@@ -114,6 +114,7 @@ class TranslationGenerator:
             translation_text = translations[idx].translation.replace("\n", " ").strip()
             transcription[idx].translation = "\n".join(self.format_multiline_caption(translation_text))
             logger.info(f"Translation for segment {idx}: {transcription[idx].translation}")
+
         return transcription
 
     def _save_subtitles(self, project_dir, subtitles):

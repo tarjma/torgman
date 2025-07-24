@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     projects_dir: Path = data_dir / "projects"  # Each project gets its own folder
     config_dir: Path = data_dir / "config"  # Application configuration files
     database_path: Path = data_dir / "torgman.db"
+    fonts_dir: Path = base_dir / "app" / "assets" / "fonts"  # Directory for custom fonts
     
     # CORS settings
     cors_origins: list = ["*"]

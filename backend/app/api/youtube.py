@@ -21,17 +21,36 @@ async def get_youtube_info(url: str):
     
     logger.info(f"Fetching YouTube video info for URL: {url}")
     video_info = youtube_processor.get_video_info(url)
-    logger.info(f"Video info fetched: {video_info}")
+    # 1. Filter for video formats that have resolution data
+    video_formats = [
+        f for f in video_info.get('formats', []) 
+        if f.get('vcodec') != 'none' and f.get('height') is not None
+    ]
+    
+    # 2. Extract the height and create a user-friendly string (e.g., "1080p")
+    #    Use a set to automatically handle duplicates.
+    resolutions = set(f'{f["height"]}p' for f in video_formats)
+    
+    # 3. Sort the resolutions numerically from highest to lowest
+    #    A simple string sort would fail (e.g., '720p' > '1080p')
+    sorted_resolutions = sorted(
+        list(resolutions),
+        key=lambda r: int(r.replace('p', '')), 
+        reverse=True
+    )
+    
+    # 4. Determine a recommended resolution (usually the best available)
+    recommended_resolution = sorted_resolutions[0] if sorted_resolutions else "N/A"
     
     return {
-        "title": video_info.get("title", "Unknown Title"),
-        "duration": video_info.get("duration", 0),
-        "thumbnail": video_info.get("thumbnail"),
         "video_id": extract_youtube_id(url),
+        "title": video_info.get("title"),
+        "duration": video_info.get("duration"),
+        "thumbnail": video_info.get("thumbnail"),
         "uploader": video_info.get("uploader"),
-        "description": video_info.get("description", ""),
-        "available_resolutions": video_info.get("available_resolutions", ["720p"]),
-        "recommended_resolution": video_info.get("recommended", "720p")
+        "description": video_info.get("description"),
+        "available_resolutions": sorted_resolutions,
+        "recommended_resolution": recommended_resolution
     }
 
 @router.post("/process")

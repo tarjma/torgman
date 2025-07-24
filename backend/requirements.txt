@@ -9,4 +9,6 @@ sqlalchemy
 python-multipart
 openai-whisper
 librosa
-moviepy
+ffmpeg-python
+google-genai
+spacy

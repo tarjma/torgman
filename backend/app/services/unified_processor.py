@@ -8,6 +8,8 @@ from ..core.database import get_database
 from .youtube_service import YouTubeVideoProcessor
 from .file_service import VideoFileProcessor
 from .transcription_service import TranscriptionGenerator
+from ..utils.ass_utils import save_ass_file
+from ..api.config import SubtitleConfig
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +105,16 @@ class UnifiedVideoProcessor:
         # Save subtitles to files and database
         project_dir = settings.get_project_dir(project_id)
         self.youtube_processor._save_subtitles(project_dir, subtitles)
+        
+        # Generate and save ASS subtitle file
+        try:
+            # Get default subtitle configuration (we'll make this configurable later)
+            default_config = SubtitleConfig()
+            ass_path = save_ass_file(project_id, subtitles, default_config)
+            logger.info(f"ASS subtitles saved successfully: {ass_path}")
+        except Exception as e:
+            logger.error(f"Failed to generate or save ASS subtitles for project {project_id}: {e}")
+            # Don't fail the entire process if ASS generation fails
         
         db = await get_database()
         await db.update_project_status(project_id, "completed", len(subtitles))

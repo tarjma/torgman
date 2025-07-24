@@ -11,24 +11,45 @@ from ..core.config import settings
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/config", tags=["config"])
 
+class CaptionMargin(BaseModel):
+    left: float = 10.0  # The left margin, in pixels. Minimum distance from the left edge of the video.
+    right: float = 10.0  # The right margin, in pixels. Minimum distance from the right edge of the video.
+    vertical: float = 10.0  # The vertical margin, in pixels. For bottom-aligned text, it's the distance from the bottom edge. For top-aligned text, it's the distance from the top edge.
+
 class SubtitleConfig(BaseModel):
-    fontSize: Optional[str] = "16px"
-    fontFamily: Optional[str] = "Arial, sans-serif"
-    fontWeight: Optional[str] = "bold"
-    color: Optional[str] = "#ffffff"
-    backgroundColor: Optional[str] = "rgba(0, 0, 0, 0.7)"
-    textAlign: Optional[str] = "center"
-    padding: Optional[str] = "8px 12px"
-    borderRadius: Optional[str] = "4px"
-    textShadow: Optional[str] = "2px 2px 4px rgba(0, 0, 0, 0.8)"
-    lineHeight: Optional[str] = "1.4"
-    maxWidth: Optional[str] = "80%"
-    position: Optional[str] = "bottom-center"  # bottom-center, top-center, center
-    marginBottom: Optional[str] = "60px"
-    marginTop: Optional[str] = "20px"
-    showTranslation: Optional[bool] = False
-    translationColor: Optional[str] = "#ffeb3b"
-    translationFontSize: Optional[str] = "14px"
+    # Basic text properties
+    fontSize: Optional[str] = "28"  # Font size in points
+    fontFamily: Optional[str] = "Cairo"
+    fontWeight: Optional[str] = "Bold"
+    
+    # Colors (hex format)
+    color: Optional[str] = "#ffffff"  # Primary text color (white)
+    secondaryColor: Optional[str] = "#0000ff"  # Secondary color for karaoke effects (red)
+    outlineColor: Optional[str] = "#000000"  # Outline/border color (black)
+    backgroundColor: Optional[str] = "#80000000"  # Background/shadow color (semi-transparent black)
+    
+    # Style flags (-1 for true, 0 for false in ASS)
+    bold: Optional[bool] = False
+    italic: Optional[bool] = False
+    underline: Optional[bool] = False
+    strikeOut: Optional[bool] = False
+    
+    # Scaling and spacing
+    scaleX: Optional[int] = 100  # Horizontal scaling percentage
+    scaleY: Optional[int] = 100  # Vertical scaling percentage
+    spacing: Optional[int] = 0   # Extra character spacing in pixels
+    angle: Optional[float] = 0   # Z-axis rotation in degrees
+    
+    # Border and shadow
+    borderStyle: Optional[int] = 1  # 1=Outline+Shadow, 3=Opaque box
+    outline: Optional[int] = 2      # Outline thickness in pixels
+    shadow: Optional[int] = 1       # Shadow distance in pixels
+    
+    # Alignment (numpad layout: 1-9)
+    alignment: Optional[int] = 2    # 2 = Bottom Center (standard for subtitles)
+    
+    # Margins
+    margin: Optional[CaptionMargin] = CaptionMargin()
 
 class ApiKeyConfig(BaseModel):
     gemini_api_key: str
@@ -106,6 +127,11 @@ async def get_subtitle_config():
     else:
         # Return default configuration
         return SubtitleConfig()
+
+@router.get("/subtitle-style/default", response_model=SubtitleConfig)
+async def get_default_subtitle_config():
+    """Get default subtitle configuration (ignoring any saved customizations)"""
+    return SubtitleConfig()
 
 @router.put("/subtitle-style")
 async def update_subtitle_config(config: SubtitleConfig):

@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import projects_router, websocket_router, youtube_router, config_router
+from .api.fonts import router as fonts_router
 from .core.config import settings
 from .core.database import get_database
 from .services import UnifiedVideoProcessor
@@ -32,6 +33,7 @@ video_processor = UnifiedVideoProcessor()
 app.include_router(projects_router, prefix=settings.api_prefix)
 app.include_router(youtube_router, prefix=settings.api_prefix)
 app.include_router(config_router, prefix=settings.api_prefix)
+app.include_router(fonts_router, prefix=settings.api_prefix)
 app.include_router(websocket_router)
 
 # Add explicit routes for trailing slash issues
@@ -158,6 +160,16 @@ async def process_youtube_video_task(url: str, project_id: str, resolution: str 
 async def process_video_file_task(file_path: str, project_id: str):
     """Background task to process uploaded video file"""
     await video_processor.process_video_file(file_path, project_id)
+
+async def export_video_task(project_id: str, video_path: str, config):
+    """Background task to burn subtitles into video."""
+    from .services.export_service import ExportService
+    export_service = ExportService()
+    # Convert the config to SubtitleConfig if it's a dict
+    if isinstance(config, dict):
+        from ..api.config import SubtitleConfig
+        config = SubtitleConfig(**config)
+    await export_service.burn_subtitles(project_id, export_format="hard", config=config)
 
 if __name__ == "__main__":
     import uvicorn
