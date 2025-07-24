@@ -2,11 +2,15 @@ import { API_CONFIG, WS_CONFIG } from '../config/api';
 
 export interface WebSocketMessage {
   project_id: string;
-  type: 'status' | 'subtitles' | 'error' | 'heartbeat' | 'completion' | 'translating' | 'pong';
-  status?: 'downloading_audio' | 'downloading_video' | 'downloading_thumbnail' | 'extracting_audio' | 'processing_audio' | 'generating_subtitles' | 'saving_data' | 'completed' | 'translating';
+  type: 'status' | 'subtitles' | 'error' | 'heartbeat' | 'completion' | 'translating' | 'pong' | 'export_status';
+  status?: 'downloading_audio' | 'downloading_video' | 'downloading_thumbnail' | 'extracting_audio' | 'processing_audio' | 'generating_subtitles' | 'saving_data' | 'completed' | 'translating' | 'export_started' | 'generating_clips' | 'compositing_video' | 'export_completed' | 'export_failed';
   progress?: number;
   message?: string;
   data?: any;
+  // Export specific fields
+  filename?: string;
+  file_size?: number;
+  download_url?: string;
 }
 
 export type WebSocketEventHandler = (message: WebSocketMessage) => void;

@@ -213,7 +213,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         />
         
         {/* Subtitle Overlay */}
-        {showSubtitles && currentSubtitle && (
+        {showSubtitles && currentSubtitle && subtitleConfig && (
           <div 
             className={`absolute z-0 transition-opacity duration-300 ${
               subtitleConfig.position === 'top-center' ? 'top-0' :
@@ -226,32 +226,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
               fontWeight: subtitleConfig.fontWeight,
               color: subtitleConfig.color,
               backgroundColor: subtitleConfig.backgroundColor,
-              textAlign: subtitleConfig.textAlign as any,
+              textAlign: 'center',
               padding: subtitleConfig.padding,
               borderRadius: subtitleConfig.borderRadius,
               textShadow: subtitleConfig.textShadow,
               lineHeight: subtitleConfig.lineHeight,
               maxWidth: subtitleConfig.maxWidth,
-              marginBottom: subtitleConfig.position === 'bottom-center' ? subtitleConfig.marginBottom : undefined,
-              marginTop: subtitleConfig.position === 'top-center' ? subtitleConfig.marginTop : undefined,
+              margin: `${subtitleConfig.margin.top}px ${subtitleConfig.margin.right}px ${subtitleConfig.margin.bottom}px ${subtitleConfig.margin.left}px`,
               whiteSpace: 'pre-wrap' as const,
-              direction: 'rtl' as const
+              direction: 'ltr' as const
             }}
           >
             <div>
               {currentSubtitle.translatedText || currentSubtitle.text || currentSubtitle.originalText}
             </div>
-            {subtitleConfig.showTranslation && currentSubtitle.translation && (
-              <div 
-                style={{
-                  color: subtitleConfig.translationColor,
-                  fontSize: subtitleConfig.translationFontSize,
-                  marginTop: '4px'
-                }}
-              >
-                {currentSubtitle.translation}
-              </div>
-            )}
           </div>
         )}
 
@@ -387,15 +375,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
                   {subtitles.length}
                 </span>
               )}
-            </button>
-            
-            {/* Subtitle Configuration */}
-            <button
-              onClick={() => setShowSubtitleConfig(true)}
-              className="p-2 hover:bg-white/20 rounded-lg transition-all duration-200"
-              title="إعدادات الترجمة"
-            >
-              <Settings className="w-4 h-4" />
             </button>
             
             <button

@@ -1,5 +1,6 @@
 import apiClient from './apiClient';
 import { API_CONFIG } from '../config/api';
+import { SubtitleConfig } from '../types/subtitleConfig';
 
 export interface ProjectData {
   id: string;
@@ -175,5 +176,15 @@ export const projectService = {
     window.URL.revokeObjectURL(url);
     
     return filename;
-  }
+  },
+
+  getApiUrl: () => {
+    // Helper to get base URL, useful for downloads
+    return window.location.origin;
+  },
+  
+  async exportProjectVideo(projectId: string, config: SubtitleConfig): Promise<{ message: string }> {
+    const response = await apiClient.post(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/export`, config);
+    return response.data;
+  },
 };

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Plus, Edit3, Trash2, Copy, Wand2, Clock, Settings, Save, FileText, ChevronUp, ChevronDown, Languages } from 'lucide-react';
 import { Subtitle } from '../types';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
+import FontSelector from './FontSelector';
 
 interface IntegratedSubtitlePanelProps {
   subtitles: Subtitle[];
@@ -21,13 +22,6 @@ interface IntegratedSubtitlePanelProps {
   isAutoSaving: boolean;
   onTriggerAutoSave?: () => void;
 }
-
-const ARABIC_FONTS = [
-  { name: 'Noto Sans Arabic', label: 'نوتو العربية' },
-  { name: 'Cairo', label: 'القاهرة' },
-  { name: 'Tajawal', label: 'تجوال' },
-  { name: 'Arial', label: 'Arial' }
-];
 
 const PRESET_COLORS = ['#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#ffff00'];
 
@@ -533,17 +527,12 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">نوع الخط</label>
-                        <select
+                        <FontSelector
                           value={subtitle.styling.fontFamily}
-                          onChange={(e) => handleStyleChange(subtitle.id, { fontFamily: e.target.value })}
+                          onChange={(fontFamily) => handleStyleChange(subtitle.id, { fontFamily })}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          {ARABIC_FONTS.map(font => (
-                            <option key={font.name} value={font.name}>
-                              {font.label}
-                            </option>
-                          ))}
-                        </select>
+                          showFileCount={false}
+                        />
                       </div>
                       
                       <div>

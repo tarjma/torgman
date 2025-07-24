@@ -1,7 +1,23 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { X, Upload, Youtube, FileVideo, Loader2, CheckCircle, RefreshCw, Info } from 'lucide-react';
 import { Project } from '../types';
 import { youtubeService, YouTubeVideoInfo } from '../services/youtubeService';
+
+// Move constants outside component for better performance
+const YOUTUBE_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/;
+
+const RESOLUTION_LABELS: { [key: string]: string } = {
+  '144p': 'جودة منخفضة',
+  '240p': 'جودة منخفضة',
+  '360p': 'جودة متوسطة',
+  '480p': 'جودة متوسطة',
+  '720p': 'جودة عالية',
+  '1080p': 'جودة عالية جداً',
+  '1440p': 'جودة فائقة',
+  '2160p': 'جودة 4K',
+  'best': 'أفضل جودة متاحة',
+  'worst': 'أقل جودة متاحة'
+};
 
 type ProjectType = 'youtube' | 'file';
 
@@ -33,6 +49,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const [isLoadingVideoInfo, setIsLoadingVideoInfo] = useState(false);
   const [videoInfoError, setVideoInfoError] = useState<string | null>(null);
 
+  // Add state for tracking manual title input and validation errors
+  const [isTitleManuallySet, setIsTitleManuallySet] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
+
   const resetForm = useCallback(() => {
     setProjectType('youtube');
     setProjectTitle('');
@@ -43,6 +63,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setVideoInfo(null);
     setVideoInfoError(null);
     setIsLoadingVideoInfo(false);
+    setIsTitleManuallySet(false);
+    setValidationErrors({});
   }, []);
 
   const handleClose = useCallback(() => {
@@ -52,6 +74,27 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     }
   }, [isProcessing, resetForm, onClose]);
 
+  // Auto-fetch YouTube info when URL changes (debounced)
+  useEffect(() => {
+    if (projectType !== 'youtube' || !youtubeUrl.trim()) {
+      return;
+    }
+
+    if (YOUTUBE_REGEX.test(youtubeUrl)) {
+      const handler = setTimeout(() => {
+        handleFetchYouTubeInfo();
+      }, 500); // 500ms debounce
+
+      return () => {
+        clearTimeout(handler);
+      };
+    } else if (youtubeUrl.trim()) {
+      // Show validation error for invalid URL
+      setVideoInfoError('رابط يوتيوب غير صحيح');
+      setVideoInfo(null);
+    }
+  }, [youtubeUrl, projectType]);
+
   // Manual YouTube info fetching
   const handleFetchYouTubeInfo = useCallback(async () => {
     if (!youtubeUrl.trim()) {
@@ -59,8 +102,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       return;
     }
 
-    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/;
-    if (!youtubeRegex.test(youtubeUrl)) {
+    if (!YOUTUBE_REGEX.test(youtubeUrl)) {
       setVideoInfoError('رابط يوتيوب غير صحيح');
       return;
     }
@@ -72,9 +114,16 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       const info = await youtubeService.getVideoInfo(youtubeUrl);
       setVideoInfo(info);
       
-      // Auto-set title if not manually entered
-      if (!projectTitle && info.title) {
+      // Auto-set title only if not manually set
+      if (!isTitleManuallySet && info.title) {
         setProjectTitle(info.title);
+      }
+      
+      // Set recommended resolution if available
+      if (info.recommended_resolution && info.available_resolutions?.includes(info.recommended_resolution)) {
+        setResolution(info.recommended_resolution);
+      } else if (info.available_resolutions?.length > 0) {
+        setResolution('best');
       }
     } catch (error) {
       console.error('Failed to fetch YouTube video info:', error);
@@ -82,7 +131,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     } finally {
       setIsLoadingVideoInfo(false);
     }
-  }, [youtubeUrl, projectTitle]);
+  }, [youtubeUrl, isTitleManuallySet]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -103,76 +152,79 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     if (files && files[0] && files[0].type.startsWith('video/')) {
       const file = files[0];
       setSelectedFile(file);
-      // Auto-set project title if empty
-      if (!projectTitle) {
-        const fileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
+      // Auto-set project title only if not manually set
+      if (!isTitleManuallySet) {
+        const fileName = file.name.replace(/\.[^/.]+$/, '');
         setProjectTitle(fileName);
       }
     }
-  }, [projectTitle]);
+  }, [isTitleManuallySet]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files[0]) {
       const file = files[0];
       setSelectedFile(file);
-      // Auto-set project title if empty
-      if (!projectTitle) {
-        const fileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
+      // Auto-set project title only if not manually set
+      if (!isTitleManuallySet) {
+        const fileName = file.name.replace(/\.[^/.]+$/, '');
         setProjectTitle(fileName);
       }
     }
-  }, [projectTitle]);
+  }, [isTitleManuallySet]);
 
+  // Fixed resolution logic - only show actual available resolutions
   const getAvailableResolutions = () => {
     if (videoInfo?.available_resolutions && videoInfo.available_resolutions.length > 0) {
-      return videoInfo.available_resolutions;
+      return ['best', ...videoInfo.available_resolutions];
     }
-    return ['144p', '240p', '360p', '480p', '720p', '1080p', 'best'];
+    return [];
   };
 
   const getResolutionLabel = (res: string): string => {
-    const resolutionLabels: { [key: string]: string } = {
-      '144p': 'جودة منخفضة',
-      '240p': 'جودة منخفضة',
-      '360p': 'جودة متوسطة',
-      '480p': 'جودة متوسطة',
-      '720p': 'جودة عالية',
-      '1080p': 'جودة عالية جداً',
-      '1440p': 'جودة فائقة',
-      '2160p': 'جودة 4K',
-      'best': 'أفضل جودة متاحة',
-      'worst': 'أقل جودة متاحة'
-    };
-    return resolutionLabels[res] || 'جودة غير محددة';
+    return RESOLUTION_LABELS[res] || 'جودة غير محددة';
+  };
+
+  // Validation function
+  const validateForm = () => {
+    const errors: {[key: string]: string} = {};
+    
+    if (!projectTitle.trim()) {
+      errors.title = 'اسم المشروع مطلوب';
+    }
+    
+    if (projectType === 'file' && !selectedFile) {
+      errors.file = 'يرجى اختيار ملف فيديو';
+    }
+    
+    if (projectType === 'youtube' && !youtubeUrl.trim()) {
+      errors.youtube = 'يرجى إدخال رابط يوتيوب';
+    }
+    
+    if (projectType === 'youtube' && youtubeUrl.trim() && !YOUTUBE_REGEX.test(youtubeUrl)) {
+      errors.youtube = 'رابط يوتيوب غير صحيح';
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!projectTitle.trim()) {
-      alert('يرجى إدخال اسم المشروع');
+    if (!validateForm()) {
       return;
     }
 
-    if (projectType === 'file' && !selectedFile) {
-      alert('يرجى اختيار ملف فيديو');
-      return;
-    }
-
-    if (projectType === 'youtube' && !youtubeUrl.trim()) {
-      alert('يرجى إدخال رابط يوتيوب');
-      return;
-    }
-
+    const isYoutube = projectType === 'youtube';
     const projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'userId'> = {
       title: projectTitle.trim(),
       description: projectDescription.trim() || undefined,
-      videoTitle: projectType === 'file' 
-        ? selectedFile?.name.replace(/\.[^/.]+$/, '') || 'فيديو محلي'
-        : videoInfo?.title || 'فيديو يوتيوب',
-      videoUrl: projectType === 'youtube' ? youtubeUrl.trim() : undefined,
-      videoFile: projectType === 'file' ? selectedFile?.name : undefined,
+      videoTitle: isYoutube 
+        ? videoInfo?.title || 'فيديو يوتيوب'
+        : selectedFile?.name.replace(/\.[^/.]+$/, '') || 'فيديو محلي',
+      videoUrl: isYoutube ? youtubeUrl.trim() : undefined,
+      videoFile: !isYoutube ? selectedFile?.name : undefined,
       subtitlesCount: 0,
       duration: 0,
       language: 'auto-detect',
@@ -182,10 +234,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     try {
       await onCreateProject(
         projectData, 
-        projectType === 'file' ? selectedFile || undefined : undefined,
-        projectType === 'youtube' ? youtubeUrl.trim() : undefined,
-        projectType === 'youtube' ? resolution : undefined,
-        projectType === 'youtube' ? videoInfo || undefined : undefined // Pass pre-fetched video info
+        !isYoutube ? selectedFile || undefined : undefined,
+        isYoutube ? youtubeUrl.trim() : undefined,
+        isYoutube ? resolution : undefined,
+        isYoutube ? videoInfo || undefined : undefined
       );
     } catch (error) {
       console.error('Project creation failed:', error);
@@ -285,12 +337,23 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 id="project-title"
                 type="text"
                 value={projectTitle}
-                onChange={(e) => setProjectTitle(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onChange={(e) => {
+                  setProjectTitle(e.target.value);
+                  setIsTitleManuallySet(true);
+                  // Clear validation error when user starts typing
+                  if (validationErrors.title) {
+                    setValidationErrors(prev => ({...prev, title: ''}));
+                  }
+                }}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  validationErrors.title ? 'border-red-300' : 'border-gray-300'
+                }`}
                 placeholder="مثال: ترجمة محاضرة التسويق الرقمي"
-                required
                 disabled={isProcessing}
               />
+              {validationErrors.title && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.title}</p>
+              )}
             </div>
             
             <div>
@@ -323,28 +386,42 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       id="youtube-url"
                       type="url"
                       value={youtubeUrl}
-                      onChange={(e) => setYoutubeUrl(e.target.value)}
-                      className="w-full pr-10 pl-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      onChange={(e) => {
+                        setYoutubeUrl(e.target.value);
+                        // Clear validation errors when user starts typing
+                        if (validationErrors.youtube) {
+                          setValidationErrors(prev => ({...prev, youtube: ''}));
+                        }
+                        if (videoInfoError) {
+                          setVideoInfoError(null);
+                        }
+                      }}
+                      className={`w-full pr-10 pl-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent ${
+                        validationErrors.youtube || videoInfoError ? 'border-red-300' : 'border-gray-300'
+                      }`}
                       placeholder="https://youtube.com/watch?v=..."
                       dir="ltr"
-                      required
                       disabled={isProcessing}
                     />
                   </div>
+                  {/* Manual fetch button - now optional since we auto-fetch */}
                   <button
                     type="button"
                     onClick={handleFetchYouTubeInfo}
                     disabled={isProcessing || isLoadingVideoInfo || !youtubeUrl.trim()}
                     className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    title="إعادة جلب المعلومات"
                   >
                     {isLoadingVideoInfo ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <RefreshCw className="w-4 h-4" />
                     )}
-                    جلب المعلومات
                   </button>
                 </div>
+                {validationErrors.youtube && (
+                  <p className="text-red-600 text-sm">{validationErrors.youtube}</p>
+                )}
               </div>
 
               {/* Error Message */}
@@ -354,41 +431,43 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 </div>
               )}
               
-              {/* Video Information Display */}
+              {/* Video Information Display - Improved single column layout */}
               {videoInfo && (
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                   <h4 className="font-medium text-gray-900 text-sm flex items-center gap-2">
                     <Info className="w-4 h-4" />
                     معلومات الفيديو:
                   </h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-2 text-sm">
                     <div>
-                      <span className="text-gray-600">العنوان:</span>
-                      <p className="font-medium truncate" title={videoInfo.title}>
+                      <span className="text-gray-600 text-xs">العنوان</span>
+                      <p className="font-medium" title={videoInfo.title}>
                         {videoInfo.title}
                       </p>
                     </div>
-                    <div>
-                      <span className="text-gray-600">المدة:</span>
-                      <p className="font-medium">
-                        {Math.floor(videoInfo.duration / 60)}:{(videoInfo.duration % 60).toString().padStart(2, '0')} دقيقة
-                      </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-gray-600 text-xs">المدة</span>
+                        <p className="font-medium">
+                          {Math.floor(videoInfo.duration / 60)}:{(videoInfo.duration % 60).toString().padStart(2, '0')} دقيقة
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 text-xs">الجودات المتاحة</span>
+                        <p className="font-medium">{getAvailableResolutions().length - 1} جودة</p>
+                      </div>
                     </div>
                     {videoInfo.uploader && (
                       <div>
-                        <span className="text-gray-600">القناة:</span>
-                        <p className="font-medium truncate">{videoInfo.uploader}</p>
+                        <span className="text-gray-600 text-xs">القناة</span>
+                        <p className="font-medium">{videoInfo.uploader}</p>
                       </div>
                     )}
-                    <div>
-                      <span className="text-gray-600">الجودات المتاحة:</span>
-                      <p className="font-medium">{getAvailableResolutions().length} جودة</p>
-                    </div>
                   </div>
                 </div>
               )}
               
-              {/* Video Resolution Selection */}
+              {/* Video Resolution Selection - Fixed logic */}
               <div className="space-y-2">
                 <label htmlFor="resolution" className="block text-sm font-medium text-gray-700">
                   جودة الفيديو
@@ -398,19 +477,28 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  disabled={isProcessing}
+                  disabled={isProcessing || getAvailableResolutions().length === 0}
                 >
-                  {getAvailableResolutions().map((res) => (
-                    <option key={res} value={res}>
-                      {res === 'best' ? 'أفضل جودة متاحة' : 
-                       res === 'worst' ? 'أقل جودة متاحة' : 
-                       `${res} - ${getResolutionLabel(res)}`}
-                      {videoInfo?.recommended_resolution === res && ' (موصى بها)'}
+                  {getAvailableResolutions().length > 0 ? (
+                    getAvailableResolutions().map((res) => (
+                      <option key={res} value={res}>
+                        {res === 'best' ? 'أفضل جودة متاحة' : 
+                         res === 'worst' ? 'أقل جودة متاحة' : 
+                         `${res} - ${getResolutionLabel(res)}`}
+                        {videoInfo?.recommended_resolution === res && ' (موصى بها)'}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">
+                      {isLoadingVideoInfo ? 'جاري جلب الجودات...' : 'يرجى إدخال رابط صالح أولاً'}
                     </option>
-                  ))}
+                  )}
                 </select>
                 <p className="text-xs text-gray-500">
-                  جودة أعلى = ملف أكبر وتحميل أطول، لكن صوت أوضح
+                  {getAvailableResolutions().length === 0 
+                    ? 'ستظهر الجودات المتاحة بعد إدخال رابط صحيح'
+                    : 'جودة أعلى = ملف أكبر وتحميل أطول، لكن صوت أوضح'
+                  }
                 </p>
               </div>
             </div>
@@ -418,56 +506,63 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
           {/* File Upload Section */}
           {projectType === 'file' && (
-            <div
-              className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                dragActive
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-300 hover:border-gray-400'
-              } ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              <div className="space-y-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-                  <Upload className="w-6 h-6 text-blue-600" />
+            <div>
+              <div
+                className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                  dragActive
+                    ? 'border-blue-500 bg-blue-50'
+                    : validationErrors.file 
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-gray-300 hover:border-gray-400'
+                } ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+              >
+                <div className="space-y-4">
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
+                    <Upload className="w-6 h-6 text-blue-600" />
+                  </div>
+                  
+                  {selectedFile ? (
+                    <div className="space-y-2">
+                      <p className="font-medium text-gray-900">{selectedFile.name}</p>
+                      <p className="text-sm text-gray-600">
+                        {(selectedFile.size / (1024 * 1024)).toFixed(1)} ميجابايت
+                      </p>
+                      {!isProcessing && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFile(null)}
+                          className="text-red-600 hover:underline text-sm"
+                        >
+                          إزالة الملف
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-gray-900 font-medium">اسحب وأفلت ملف الفيديو هنا</p>
+                      <p className="text-gray-600">أو انقر للاختيار من جهازك</p>
+                      <p className="text-xs text-gray-500">
+                        الصيغ المدعومة: MP4, AVI, MOV, MKV (حد أقصى 500 ميجابايت)
+                      </p>
+                    </div>
+                  )}
                 </div>
                 
-                {selectedFile ? (
-                  <div className="space-y-2">
-                    <p className="font-medium text-gray-900">{selectedFile.name}</p>
-                    <p className="text-sm text-gray-600">
-                      {(selectedFile.size / (1024 * 1024)).toFixed(1)} ميجابايت
-                    </p>
-                    {!isProcessing && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedFile(null)}
-                        className="text-red-600 hover:underline text-sm"
-                      >
-                        إزالة الملف
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-gray-900 font-medium">اسحب وأفلت ملف الفيديو هنا</p>
-                    <p className="text-gray-600">أو انقر للاختيار من جهازك</p>
-                    <p className="text-xs text-gray-500">
-                      الصيغ المدعومة: MP4, AVI, MOV, MKV (حد أقصى 500 ميجابايت)
-                    </p>
-                  </div>
-                )}
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileInput}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={isProcessing}
+                />
               </div>
-              
-              <input
-                type="file"
-                accept="video/*"
-                onChange={handleFileInput}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                disabled={isProcessing}
-              />
+              {validationErrors.file && (
+                <p className="mt-2 text-sm text-red-600">{validationErrors.file}</p>
+              )}
             </div>
           )}
 
@@ -483,13 +578,14 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={
-                isProcessing || 
-                !projectTitle.trim() || 
-                (projectType === 'file' && !selectedFile) || 
-                (projectType === 'youtube' && !youtubeUrl.trim())
-              }
+              disabled={isProcessing}
               className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              title={
+                !projectTitle.trim() ? 'يرجى إدخال اسم المشروع' :
+                projectType === 'file' && !selectedFile ? 'يرجى اختيار ملف فيديو' :
+                projectType === 'youtube' && !youtubeUrl.trim() ? 'يرجى إدخال رابط يوتيوب' :
+                ''
+              }
             >
               {isProcessing ? (
                 <>

@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { X, RotateCcw } from 'lucide-react';
 import { SubtitleConfig } from '../types/subtitleConfig';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
+import { useFonts } from '../hooks/useFonts';
+import FontSelector from './FontSelector';
+import FontWeightSelector from './FontWeightSelector';
 
 interface SubtitleConfigModalProps {
   isOpen: boolean;
@@ -9,15 +12,37 @@ interface SubtitleConfigModalProps {
 }
 
 const SubtitleConfigModal: React.FC<SubtitleConfigModalProps> = ({ isOpen, onClose }) => {
-  const { config, updateConfig, resetConfig, error } = useSubtitleConfig();
-  const [localConfig, setLocalConfig] = useState<SubtitleConfig>(config);
+  const { config, updateConfig, resetConfig, error, isLoading } = useSubtitleConfig();
+  const { fontFamilies, validateFontFamily, validateFontWeight } = useFonts();
+  const [localConfig, setLocalConfig] = useState<SubtitleConfig | null>(config);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    setLocalConfig(config);
+    if (config) {
+      setLocalConfig(config);
+    }
   }, [config]);
 
+  // Validate and fix font configuration when fonts are loaded
+  useEffect(() => {
+    if (fontFamilies.length > 0 && localConfig?.fontFamily) {
+      const validatedFamily = validateFontFamily(localConfig.fontFamily);
+      const validatedWeight = validateFontWeight(validatedFamily, localConfig.fontWeight);
+      
+      // Only update if validation changed something
+      if (validatedFamily !== localConfig.fontFamily || validatedWeight !== localConfig.fontWeight) {
+        setLocalConfig(prev => prev ? ({
+          ...prev,
+          fontFamily: validatedFamily,
+          fontWeight: validatedWeight
+        }) : null);
+      }
+    }
+  }, [fontFamilies, localConfig?.fontFamily, localConfig?.fontWeight, validateFontFamily, validateFontWeight]);
+
   const handleSave = async () => {
+    if (!localConfig) return;
+    
     try {
       setIsSaving(true);
       await updateConfig(localConfig);
@@ -39,10 +64,36 @@ const SubtitleConfigModal: React.FC<SubtitleConfigModalProps> = ({ isOpen, onClo
   };
 
   const updateLocalConfig = (field: keyof SubtitleConfig, value: any) => {
-    setLocalConfig(prev => ({ ...prev, [field]: value }));
+    setLocalConfig(prev => prev ? ({ ...prev, [field]: value }) : null);
+  };
+
+  const handleFontFamilyChange = (fontFamily: string) => {
+    if (!localConfig) return;
+    
+    // Validate the font family and weight
+    const validatedFamily = validateFontFamily(fontFamily);
+    const validatedWeight = validateFontWeight(validatedFamily, 'Regular');
+    
+    // Update both font family and weight
+    setLocalConfig(prev => prev ? ({ 
+      ...prev, 
+      fontFamily: validatedFamily,
+      fontWeight: validatedWeight
+    }) : null);
   };
 
   if (!isOpen) return null;
+
+  // Show loading state while config is being fetched
+  if (!localConfig) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg p-6">
+          <div className="text-center">Loading configuration...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -85,32 +136,22 @@ const SubtitleConfigModal: React.FC<SubtitleConfigModalProps> = ({ isOpen, onClo
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Font Family
                   </label>
-                  <select
+                  <FontSelector
                     value={localConfig.fontFamily}
-                    onChange={(e) => updateLocalConfig('fontFamily', e.target.value)}
+                    onChange={handleFontFamilyChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="Arial, sans-serif">Arial</option>
-                    <option value="'Times New Roman', serif">Times New Roman</option>
-                    <option value="'Courier New', monospace">Courier New</option>
-                    <option value="Helvetica, sans-serif">Helvetica</option>
-                    <option value="Georgia, serif">Georgia</option>
-                  </select>
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Font Weight
                   </label>
-                  <select
+                  <FontWeightSelector
+                    fontFamily={localConfig.fontFamily}
                     value={localConfig.fontWeight}
-                    onChange={(e) => updateLocalConfig('fontWeight', e.target.value)}
+                    onChange={(fontWeight) => updateLocalConfig('fontWeight', fontWeight)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="normal">Normal</option>
-                    <option value="bold">Bold</option>
-                    <option value="lighter">Lighter</option>
-                    <option value="bolder">Bolder</option>
-                  </select>
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -168,7 +209,7 @@ const SubtitleConfigModal: React.FC<SubtitleConfigModalProps> = ({ isOpen, onClo
             {/* Position Settings */}
             <div className="border rounded-lg p-4">
               <h3 className="text-lg font-semibold mb-4">Position Settings</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Position
@@ -185,18 +226,6 @@ const SubtitleConfigModal: React.FC<SubtitleConfigModalProps> = ({ isOpen, onClo
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bottom Margin
-                  </label>
-                  <input
-                    type="text"
-                    value={localConfig.marginBottom}
-                    onChange={(e) => updateLocalConfig('marginBottom', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="60px"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Max Width
                   </label>
                   <input
@@ -208,59 +237,66 @@ const SubtitleConfigModal: React.FC<SubtitleConfigModalProps> = ({ isOpen, onClo
                   />
                 </div>
               </div>
-            </div>
-
-            {/* Translation Settings */}
-            <div className="border rounded-lg p-4">
-              <h3 className="text-lg font-semibold mb-4">Translation Settings</h3>
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="showTranslation"
-                    checked={localConfig.showTranslation}
-                    onChange={(e) => updateLocalConfig('showTranslation', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <label htmlFor="showTranslation" className="text-sm font-medium text-gray-700">
-                    Show translation alongside original text
-                  </label>
-                </div>
-                {localConfig.showTranslation && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-7">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Translation Color
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="color"
-                          value={localConfig.translationColor}
-                          onChange={(e) => updateLocalConfig('translationColor', e.target.value)}
-                          className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
-                        />
-                        <input
-                          type="text"
-                          value={localConfig.translationColor}
-                          onChange={(e) => updateLocalConfig('translationColor', e.target.value)}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Translation Font Size
-                      </label>
-                      <input
-                        type="text"
-                        value={localConfig.translationFontSize}
-                        onChange={(e) => updateLocalConfig('translationFontSize', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="14px"
-                      />
-                    </div>
+              
+              {/* Margin Settings */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Margins
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Top</label>
+                    <input
+                      type="number"
+                      value={localConfig.margin.top}
+                      onChange={(e) => updateLocalConfig('margin', {
+                        ...localConfig.margin,
+                        top: parseFloat(e.target.value) || 0
+                      })}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="0"
+                    />
                   </div>
-                )}
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Right</label>
+                    <input
+                      type="number"
+                      value={localConfig.margin.right}
+                      onChange={(e) => updateLocalConfig('margin', {
+                        ...localConfig.margin,
+                        right: parseFloat(e.target.value) || 0
+                      })}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Bottom</label>
+                    <input
+                      type="number"
+                      value={localConfig.margin.bottom}
+                      onChange={(e) => updateLocalConfig('margin', {
+                        ...localConfig.margin,
+                        bottom: parseFloat(e.target.value) || 0
+                      })}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Left</label>
+                    <input
+                      type="number"
+                      value={localConfig.margin.left}
+                      onChange={(e) => updateLocalConfig('margin', {
+                        ...localConfig.margin,
+                        left: parseFloat(e.target.value) || 0
+                      })}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -279,21 +315,11 @@ const SubtitleConfigModal: React.FC<SubtitleConfigModalProps> = ({ isOpen, onClo
                     lineHeight: localConfig.lineHeight,
                     textShadow: localConfig.textShadow,
                     borderRadius: localConfig.borderRadius,
-                    padding: localConfig.padding
+                    padding: localConfig.padding,
+                    margin: `${localConfig.margin.top}px ${localConfig.margin.right}px ${localConfig.margin.bottom}px ${localConfig.margin.left}px`
                   }}
                 >
                   Sample subtitle text
-                  {localConfig.showTranslation && (
-                    <div 
-                      style={{
-                        color: localConfig.translationColor,
-                        fontSize: localConfig.translationFontSize,
-                        marginTop: '4px'
-                      }}
-                    >
-                      نص الترجمة التجريبي
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

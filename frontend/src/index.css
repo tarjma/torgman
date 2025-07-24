@@ -81,31 +81,58 @@ video {
   transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
-/* Volume slider styling */
-.slider {
-  background: linear-gradient(to right, #3b82f6 0%, #3b82f6 var(--volume-percentage, 100%), rgba(255,255,255,0.3) var(--volume-percentage, 100%), rgba(255,255,255,0.3) 100%);
-}
-
-.slider::-webkit-slider-thumb {
+/* Enhanced slider styling for subtitle settings */
+.subtitle-slider {
   appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ffffff;
+  height: 8px;
+  background: linear-gradient(to right, #3b82f6 0%, #3b82f6 var(--value, 50%), #e5e7eb var(--value, 50%), #e5e7eb 100%);
   cursor: pointer;
-  border: 2px solid #3b82f6;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  transition: all 0.2s ease;
+  border-radius: 4px;
 }
 
-.slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+.subtitle-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: #ffffff;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
   cursor: pointer;
-  border: 2px solid #3b82f6;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  border: 2px solid white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  transition: all 0.2s ease;
 }
+
+.subtitle-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.subtitle-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.subtitle-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+  /* Gradient backgrounds for sections */
+  .gradient-bg-blue {
+    background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 50%, #f8fafc 100%);
+  }
+  
+  .gradient-bg-purple {
+    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 50%, #f8fafc 100%);
+  }
 
 /* Enhanced shadows */
 .shadow-strong {

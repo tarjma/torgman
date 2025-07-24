@@ -7,6 +7,7 @@ export const API_CONFIG = {
     YOUTUBE_PROCESS: '/api/youtube/process', 
     PROJECTS: '/api/projects',
     PROJECTS_UPLOAD: '/api/projects/upload',
+    FONTS: '/api/fonts',
     WEBSOCKET: '/ws'
   }
 } as const;

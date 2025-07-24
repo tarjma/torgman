@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { Languages } from 'lucide-react';
+import { Languages, Loader2 } from 'lucide-react';
 
 // Components
 import VideoPlayer from '../components/VideoPlayer';
@@ -18,6 +18,7 @@ import { useProjectStatusUpdates } from '../hooks/useProjectStatusUpdates';
 import { useProjectSubtitleUpdates } from '../hooks/useProjectSubtitleUpdates';
 import { useSubtitlePolling } from '../hooks/useSubtitlePolling';
 import { useAutoSave } from '../hooks/useAutoSave';
+import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
 
 // Services
 import { projectService } from '../services/projectService';
@@ -36,6 +37,15 @@ const ProjectEditorPage = () => {
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [translationStatus, setTranslationStatus] = useState<{ status: string; message: string; progress?: number } | null>(null);
+  // Define the export status type
+  interface ExportStatus {
+    status: string;
+    message: string;
+    progress: number;
+    data?: any;
+  }
+  
+  const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
   const [project, setProject] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -118,6 +128,9 @@ const ProjectEditorPage = () => {
     isTranslating,
     translateText
   } = useAITranslation();
+
+  // Get global subtitle config for export
+  const { config: subtitleConfig } = useSubtitleConfig();
 
   // Load project data when component mounts
   useEffect(() => {
@@ -320,6 +333,31 @@ const ProjectEditorPage = () => {
     downloadFile(content, filename, mimeType);
   }, [subtitles, videoInfo]);
 
+  const handleExportVideo = useCallback(async () => {
+    if (!projectId || !subtitleConfig) {
+      alert('لم يتم تحميل بيانات المشروع أو إعدادات الترجمة بعد.');
+      return;
+    }
+
+    if (exportStatus && !['export_completed', 'export_failed'].includes(exportStatus.status)) {
+      alert('عملية تصدير أخرى قيد التنفيذ بالفعل.');
+      return;
+    }
+
+    const confirmExport = confirm(`سيتم دمج الترجمة في الفيديو بشكل دائم. قد تستغرق هذه العملية بعض الوقت. هل تريد المتابعة؟`);
+    if (!confirmExport) return;
+
+    try {
+      setExportStatus({ status: 'starting', message: 'بدء عملية التصدير...', progress: 0 });
+      await projectService.exportProjectVideo(projectId, subtitleConfig);
+    } catch (error) {
+      console.error('Failed to start video export:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`فشل في بدء عملية تصدير الفيديو: ${errorMessage}`);
+      setExportStatus(null);
+    }
+  }, [projectId, subtitleConfig, exportStatus]);
+
   // Auto-update active subtitle based on current time
   const handleTimeUpdate = useCallback((time: number) => {
     setCurrentTime(time);
@@ -345,6 +383,89 @@ const ProjectEditorPage = () => {
       seekToSubtitle(nextSub.id);
     }
   }, [findNextSubtitle, seekToSubtitle]);
+
+  // WebSocket message handler for export status updates
+  useEffect(() => {
+    if (!projectId) return;
+
+    const handleExportMessage = (message: any) => {
+      try {
+        console.log('Raw WebSocket message received:', JSON.stringify(message, null, 2));
+        
+        if (message.project_id !== projectId) {
+          console.log(`Message project_id (${message.project_id}) doesn't match current projectId (${projectId})`);
+          return;
+        }
+
+        console.log('Message is for current project, processing...');
+
+        // Handle Export Status
+        if (message.type === 'export_status') {
+          console.log('Processing export status message:', JSON.stringify(message, null, 2));
+          const { status, message: msg, progress = 0, data } = message;
+          
+          console.log('Extracted values:', { status, msg, progress, data });
+          
+          // Always update the export status to ensure progress is shown
+          setExportStatus({
+            status: status || 'processing',
+            message: msg || 'جاري معالجة التصدير...',
+            progress: typeof progress === 'number' ? progress : 0,
+            ...(data ? { data } : {})
+          });
+
+          // Handle completion
+          if (status === 'export_completed') {
+            console.log('Export completed! Data:', JSON.stringify(data, null, 2));
+            if (data?.download_url) {
+              const downloadUrl = `${window.location.origin}${data.download_url}`;
+              console.log('Constructed download URL:', downloadUrl);
+              console.log('Download filename:', data.filename || 'exported_video.mp4');
+              
+              // Create a hidden link and trigger click
+              const link = document.createElement('a');
+              link.href = downloadUrl;
+              link.download = data.filename || 'exported_video.mp4';
+              document.body.appendChild(link);
+              console.log('Clicking download link...');
+              link.click();
+              document.body.removeChild(link);
+              console.log('Download link clicked and removed');
+              
+              // Show success message
+              setExportStatus({
+                status: 'export_completed',
+                message: 'تم تصدير الفيديو بنجاح! جاري التحميل...',
+                progress: 100,
+                data
+              });
+              
+              // Clear status after delay
+              setTimeout(() => setExportStatus(null), 5000);
+            } else {
+              console.error('Export completed but no download_url found in data:', data);
+            }
+          } 
+          // Handle failure
+          else if (status === 'export_failed') {
+            console.error('Export failed:', msg);
+            alert(`فشل تصدير الفيديو: ${msg}`);
+            setExportStatus(null);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse WebSocket message", e);
+      }
+    };
+
+    // Add event handler for export messages - use '*' to catch all messages
+    webSocketService.addEventListener('*', handleExportMessage);
+
+    return () => {
+      // Clean up event handler
+      webSocketService.removeEventListener('*', handleExportMessage);
+    };
+  }, [projectId]);
 
   // Loading state
   if (isLoading) {
@@ -401,6 +522,20 @@ const ProjectEditorPage = () => {
   // Editor mode with video loaded - Full viewport height layout
   return (
     <div className="h-screen bg-gray-50 relative flex flex-col overflow-hidden" dir="rtl">
+      {exportStatus && !['export_completed', 'export_failed'].includes(exportStatus.status) && (
+        <div className="absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-[100] text-white">
+          <Loader2 className="w-12 h-12 animate-spin mb-4" />
+          <h2 className="text-2xl font-bold mb-2">جاري تصدير الفيديو...</h2>
+          <p className="mb-4">{exportStatus.message}</p>
+          <div className="w-80 bg-gray-600 rounded-full h-2.5">
+            <div 
+              className="bg-blue-500 h-2.5 rounded-full transition-all duration-300" 
+              style={{ width: `${exportStatus.progress || 0}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
+
       {/* Header - Fixed height */}
       <div className="flex-shrink-0">
         <VideoPlayerHeader
@@ -409,9 +544,11 @@ const ProjectEditorPage = () => {
           currentTime={currentTime}
           duration={videoInfo.duration || 0}
           subtitleCount={subtitles.length}
+          isExporting={!!(exportStatus && !['export_completed', 'export_failed'].includes(exportStatus.status))}
           onBackToHome={handleBackToHome}
           onShowGlobalSettings={() => setShowGlobalSettings(true)}
           onExport={handleExportSubtitles}
+          onExportVideo={handleExportVideo}
         />
       </div>
       

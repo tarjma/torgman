@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SubtitleConfig, defaultSubtitleConfig } from '../types/subtitleConfig';
+import { SubtitleConfig } from '../types/subtitleConfig';
 import { subtitleConfigService } from '../services/subtitleConfigService';
 
 export const useSubtitleConfig = () => {
-  const [config, setConfig] = useState<SubtitleConfig>(defaultSubtitleConfig);
+  // Initialize with null to indicate loading state
+  const [config, setConfig] = useState<SubtitleConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +38,9 @@ export const useSubtitleConfig = () => {
     try {
       setError(null);
       await subtitleConfigService.resetConfig();
-      setConfig(defaultSubtitleConfig);
+      // After reset, fetch the fresh default config from backend
+      const defaultConfig = await subtitleConfigService.getDefaultConfig();
+      setConfig(defaultConfig);
     } catch (err) {
       setError('Failed to reset subtitle configuration');
       console.error('Error resetting subtitle config:', err);

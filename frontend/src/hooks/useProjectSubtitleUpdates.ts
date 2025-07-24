@@ -51,9 +51,36 @@ export const useProjectSubtitleUpdates = (
       
       console.log('Converted subtitles:', frontendSubtitles);
       onSubtitlesUpdate(frontendSubtitles);
-    } else if ((message.type === 'status' || message.type === 'completion' || message.type === 'error') && onStatusUpdate) {
-      // Handle status updates for translation progress
-      onStatusUpdate(message.status || message.type, message.message || 'Processing...');
+    } else if ((message.type === 'status' || message.type === 'completion' || message.type === 'error' || message.type === 'export_status') && onStatusUpdate) {
+      // Handle status updates for translation progress and export status
+      if (message.type === 'export_status') {
+        // Handle export-specific status updates
+        const status = message.status || 'processing';
+        const messageText = message.message || 
+          (status === 'export_started' ? 'جاري تصدير الفيديو...' :
+           status === 'export_completed' ? 'تم تصدير الفيديو بنجاح' :
+           status === 'export_failed' ? 'فشل تصدير الفيديو' :
+           'جاري معالجة التصدير...');
+        
+        onStatusUpdate(status, messageText);
+        
+        // If export is completed, show download link
+        if (status === 'export_completed' && (message.download_url || message.data?.download_url)) {
+          // Create a temporary link to trigger download
+          const downloadUrl = message.data?.download_url || message.download_url;
+          const filename = message.data?.filename || message.filename || 'exported_video.mp4';
+          
+          const link = document.createElement('a');
+          link.href = `${window.location.origin}${downloadUrl}`;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      } else {
+        // Handle other status updates (translation, etc.)
+        onStatusUpdate(message.status || message.type, message.message || 'Processing...');
+      }
     }
   }, [projectId, onSubtitlesUpdate, onStatusUpdate]);
 
