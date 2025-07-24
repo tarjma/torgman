@@ -10,12 +10,7 @@ A tool that aims to be a central hub for any translation project anyone wants to
 Just, Run this single command 😅
 
 ```bash
-docker run \
-    -v ./data:/app/data \
-    -p 8000:8000 \
-    --gpus all \
-    --name torgman \
-    ghcr.io/tarjma/torgman:latest
+docker run -v ./data:/app/data -p 8000:8000 --gpus all --name torgman ghcr.io/tarjma/torgman:latest
 ```
 
 Once the container is running, open your browser and navigate to:
