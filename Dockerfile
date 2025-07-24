@@ -10,32 +10,28 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Python backend with embedded frontend
-FROM python:3.11-slim
+FROM ghcr.io/astral-sh/uv:0.7.8-python3.11-bookworm-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
-    git \
+    fontconfig \ 
     && rm -rf /var/lib/apt/lists/*
 
-# # Install Ollama
-# RUN curl -fsSL https://ollama.ai/install.sh | sh
-# RUN ollama serve & \
-#     sleep 10 && \
-#     ollama pull alibayram/smollm3:latest
+# The source path `./fonts/` is relative to your Docker build context root.
+COPY ./backend/app/assets/fonts/ /usr/share/fonts/truetype/custom/
 
-# Cache Models
-RUN pip install openai-whisper
-RUN python -c "import whisper; whisper.load_model('turbo')"
+# Rebuild the font cache to make the new fonts discoverable by name
+RUN fc-cache -f -v
 
 # Set working directory
 WORKDIR /app
 
 # Copy backend requirements and install Python dependencies
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install google-genai spacy
+RUN --mount=type=cache,target=/root/.cache/pip uv pip install --system --no-cache-dir -r requirements.txt
+RUN python -c "import whisper; whisper.load_model('turbo')"
 RUN python -m spacy download en_core_web_sm
 
 # Copy backend code
