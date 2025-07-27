@@ -24,65 +24,71 @@ class UnifiedVideoProcessor:
     
     async def process_youtube_video(self, url: str, project_id: str, resolution: str = "720p"):
         """Process a YouTube video with unified workflow"""
-        # Send initial status
-        await self._send_status(project_id, "downloading_video", 5, f"Downloading YouTube video in {resolution}...")
-        
-        # Step 1: Download full video
-        video_path = self.youtube_processor.download_video(url, project_id, resolution)
-        
-        await self._send_status(project_id, "downloading_thumbnail", 20, "Downloading video thumbnail...")
-        
-        # Step 2: Download thumbnail
-        thumbnail_path = self.youtube_processor.download_thumbnail(url, project_id)
-        
-        # Step 3: Process audio and generate subtitles
-        subtitles = await self._process_audio_and_subtitles(video_path, project_id, 35)
-        
-        # Step 4: Save YouTube-specific metadata
-        await self._send_status(project_id, "saving_data", 90, "Saving project data...")
-        
-        project_dir = settings.get_project_dir(project_id)
-        self.youtube_processor._save_project_metadata(
-            project_dir, 
-            project_id, 
-            url, 
-            resolution, 
-            Path(video_path).name if video_path else "",
-            Path(thumbnail_path).name if thumbnail_path else ""
-        )
-        
-        # Step 5: Finalize
-        await self._finalize_processing(project_id, subtitles, {
-            "video_file": Path(video_path).name if video_path else "",
-            "audio_file": f"{project_id}_audio.wav",
-            "thumbnail_file": Path(thumbnail_path).name if thumbnail_path else "",
-            "subtitle_count": len(subtitles)
-        })
+        try:
+            # Send initial status
+            await self._send_status(project_id, "downloading_video", 5, f"Downloading YouTube video in {resolution}...")
+            
+            # Step 1: Download full video
+            video_path = self.youtube_processor.download_video(url, project_id, resolution)
+            
+            await self._send_status(project_id, "downloading_thumbnail", 20, "Downloading video thumbnail...")
+            
+            # Step 2: Download thumbnail
+            thumbnail_path = self.youtube_processor.download_thumbnail(url, project_id)
+            
+            # Step 3: Process audio and generate subtitles
+            subtitles = await self._process_audio_and_subtitles(video_path, project_id, 35)
+            
+            # Step 4: Save YouTube-specific metadata
+            await self._send_status(project_id, "saving_data", 90, "Saving project data...")
+            
+            project_dir = settings.get_project_dir(project_id)
+            self.youtube_processor._save_project_metadata(
+                project_dir, 
+                project_id, 
+                url, 
+                resolution, 
+                Path(video_path).name if video_path else "",
+                Path(thumbnail_path).name if thumbnail_path else ""
+            )
+            
+            # Step 5: Finalize
+            await self._finalize_processing(project_id, subtitles, {
+                "video_file": Path(video_path).name if video_path else "",
+                "audio_file": f"{project_id}_audio.wav",
+                "thumbnail_file": Path(thumbnail_path).name if thumbnail_path else "",
+                "subtitle_count": len(subtitles)
+            })
+        except Exception as e:
+            await self._handle_error(project_id, e, "YouTube video processing")
             
     async def process_video_file(self, file_path: str, project_id: str):
         """Process an uploaded video file with unified workflow"""
-        # Send initial status
-        await self._send_status(project_id, "processing", 10, "Processing uploaded video file...")
-        
-        # Step 1: Extract video information
-        await self._send_status(project_id, "extracting_info", 20, "Extracting video information...")
-        
-        # Update project status to processing
-        db = await get_database()
-        await db.update_project_status(project_id, "processing", None)
-        
-        # Step 2: Process audio and generate subtitles
-        subtitles = await self._process_audio_and_subtitles(file_path, project_id, 40)
-        
-        # Step 3: Save file-specific metadata
-        project_dir = settings.get_project_dir(project_id)
-        self.file_processor._save_project_metadata(project_dir, project_id, file_path)
-        
-        # Step 4: Finalize
-        await self._finalize_processing(project_id, subtitles, {
-            "audio_file": f"{project_id}_audio.wav",
-            "subtitle_count": len(subtitles)
-        })
+        try:
+            # Send initial status
+            await self._send_status(project_id, "processing", 10, "Processing uploaded video file...")
+            
+            # Step 1: Extract video information
+            await self._send_status(project_id, "extracting_info", 20, "Extracting video information...")
+            
+            # Update project status to processing
+            db = await get_database()
+            await db.update_project_status(project_id, "processing", None)
+            
+            # Step 2: Process audio and generate subtitles
+            subtitles = await self._process_audio_and_subtitles(file_path, project_id, 40)
+            
+            # Step 3: Save file-specific metadata
+            project_dir = settings.get_project_dir(project_id)
+            self.file_processor._save_project_metadata(project_dir, project_id, file_path)
+            
+            # Step 4: Finalize
+            await self._finalize_processing(project_id, subtitles, {
+                "audio_file": f"{project_id}_audio.wav",
+                "subtitle_count": len(subtitles)
+            })
+        except Exception as e:
+            await self._handle_error(project_id, e, "video file processing")
     
     async def _process_audio_and_subtitles(self, video_path: str, project_id: str, start_progress: int):
         """Common audio processing and subtitle generation workflow"""

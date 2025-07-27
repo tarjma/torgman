@@ -99,7 +99,7 @@ class TranslationGenerator:
         class TranslatedCaption(BaseModel):
             translation: str
 
-        transcription_str = json.dumps([{"start": caption.start, "end": caption.end, "text": caption.text} for caption in transcription])
+        transcription_str = json.dumps([{"start_time": caption.start_time, "end_time": caption.end_time, "text": caption.text} for caption in transcription])
         prompt = "This is the transcription of a video. Please translate it into Arabic.\n\n" + transcription_str
         response = self.client.models.generate_content(
             model="gemini-2.5-pro",

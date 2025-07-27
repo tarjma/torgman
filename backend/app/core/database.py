@@ -151,9 +151,12 @@ class Database:
             subtitles_data = json.load(f)
         subtitles = []
         for subtitle in subtitles_data:
+            # Handle both old and new field names for backward compatibility during migration
+            start_time = subtitle.get("start_time", subtitle.get("start", 0))
+            end_time = subtitle.get("end_time", subtitle.get("end", 0))
             subtitles.append(CaptionData(
-                start=subtitle["start"],
-                end=subtitle["end"],
+                start_time=start_time,
+                end_time=end_time,
                 text=subtitle["text"],
                 confidence=subtitle["confidence"],
                 translation=subtitle.get("translation", None)

@@ -51,10 +51,10 @@ export const useAutoSave = ({
       isSavingRef.current = true;
       onSaveStart?.();
 
-      // Convert frontend subtitles to backend format
+      // Convert frontend subtitles to backend format (now using consistent field names)
       const backendSubtitles = subtitles.map((subtitle) => ({
-        start: subtitle.start_time,
-        end: subtitle.end_time,
+        start_time: subtitle.start_time,
+        end_time: subtitle.end_time,
         text: subtitle.originalText || subtitle.text,
         translation: subtitle.translatedText,
         confidence: subtitle.confidence || 1.0,

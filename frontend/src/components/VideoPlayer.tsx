@@ -234,7 +234,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
               maxWidth: subtitleConfig.maxWidth,
               margin: `${subtitleConfig.margin.top}px ${subtitleConfig.margin.right}px ${subtitleConfig.margin.bottom}px ${subtitleConfig.margin.left}px`,
               whiteSpace: 'pre-wrap' as const,
-              direction: 'ltr' as const
+              direction: 'rtl' as const
             }}
           >
             <div>

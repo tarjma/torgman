@@ -7,9 +7,10 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import projects_router, websocket_router, youtube_router, config_router
 from .api.fonts import router as fonts_router
+from .api.subtitles import router as subtitles_router
+from .api.export import router as export_router
 from .core.config import settings
 from .core.database import get_database
-from .services import UnifiedVideoProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,11 +27,10 @@ app.add_middleware(
     allow_headers=settings.cors_headers,
 )
 
-# Initialize unified video processor
-video_processor = UnifiedVideoProcessor()
-
 # Include API routers AFTER service initialization
 app.include_router(projects_router, prefix=settings.api_prefix)
+app.include_router(subtitles_router, prefix=settings.api_prefix)
+app.include_router(export_router, prefix=settings.api_prefix)
 app.include_router(youtube_router, prefix=settings.api_prefix)
 app.include_router(config_router, prefix=settings.api_prefix)
 app.include_router(fonts_router, prefix=settings.api_prefix)
@@ -152,24 +152,6 @@ async def serve_frontend(path: str = ""):
         return FileResponse(str(index_file))
     else:
         return {"error": "Frontend not found", "message": "Static files not available"}
-
-async def process_youtube_video_task(url: str, project_id: str, resolution: str = "720p"):
-    """Background task to process YouTube video with enhanced features"""
-    await video_processor.process_youtube_video(url, project_id, resolution)
-
-async def process_video_file_task(file_path: str, project_id: str):
-    """Background task to process uploaded video file"""
-    await video_processor.process_video_file(file_path, project_id)
-
-async def export_video_task(project_id: str, video_path: str, config):
-    """Background task to burn subtitles into video."""
-    from .services.export_service import ExportService
-    export_service = ExportService()
-    # Convert the config to SubtitleConfig if it's a dict
-    if isinstance(config, dict):
-        from ..api.config import SubtitleConfig
-        config = SubtitleConfig(**config)
-    await export_service.burn_subtitles(project_id, export_format="hard", config=config)
 
 if __name__ == "__main__":
     import uvicorn

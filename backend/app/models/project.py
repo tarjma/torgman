@@ -33,8 +33,8 @@ class ProjectData(BaseModel):
     updated_at: Optional[datetime] = None
 
 class CaptionData(BaseModel):
-    start: float
-    end: float
+    start_time: float
+    end_time: float
     text: str
     confidence: Optional[float] = None
     translation: Optional[str] = None

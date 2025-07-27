@@ -178,11 +178,11 @@ const ProjectEditorPage = () => {
         const backendSubtitles = await projectService.getProjectSubtitles(projectId);
         console.log('Backend subtitles received:', backendSubtitles);
         
-        // Convert backend subtitles to frontend format
+        // Convert backend subtitles to frontend format (now using consistent field names)
         const frontendSubtitles = backendSubtitles.map((sub, index) => ({
           id: `${projectId}-${index}`,
-          start_time: sub.start,
-          end_time: sub.end,
+          start_time: sub.start_time,
+          end_time: sub.end_time,
           text: sub.text,
           originalText: sub.text,
           translatedText: sub.translation || '',

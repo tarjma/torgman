@@ -28,11 +28,9 @@ async def get_youtube_info(url: str):
     ]
     
     # 2. Extract the height and create a user-friendly string (e.g., "1080p")
-    #    Use a set to automatically handle duplicates.
-    resolutions = set(f'{f["height"]}p' for f in video_formats)
-    
-    # 3. Sort the resolutions numerically from highest to lowest
-    #    A simple string sort would fail (e.g., '720p' > '1080p')
+    resolutions = set(f'{f["height"]}p' for f in video_formats) # Use a set to automatically handle duplicates.
+
+    # 3. Sort the resolutions numerically from highest to lowest (A simple string sort would fail (e.g., '720p' > '1080p'))
     sorted_resolutions = sorted(
         list(resolutions),
         key=lambda r: int(r.replace('p', '')), 
@@ -77,8 +75,8 @@ async def process_youtube_video(request: YouTubeProcessRequest):
     if not success:
         raise HTTPException(status_code=500, detail="Failed to create project in database")
     
-    # Start background processing (import here to avoid circular imports)
-    from ..main import process_youtube_video_task
+    # Start background processing
+    from ..tasks.video_processing import process_youtube_video_task
     asyncio.create_task(process_youtube_video_task(
         request.url, 
         request.project_id, 

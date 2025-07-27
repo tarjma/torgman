@@ -71,15 +71,19 @@ class TranscriptionGenerator:
                 return [text[:self.max_chars_per_line], text[self.max_chars_per_line:].strip()]
             return [text[:mid_point], text[mid_point:].strip()]
 
-        # **CRITICAL BUG FIX**: Score splits to prefer inverted pyramids
+        # Score splits to prefer inverted pyramids (top-heavy captions)
         best_split = None
-        # Score is a tuple: (is_top_heavy, length_difference). Lower is better.
+        # Score is a tuple: (not is_top_heavy, length_difference). Lower is better.
+        # We want is_top_heavy=True to get a score starting with False (0), which is preferred
         best_score = (True, float('inf')) 
 
         for line1, line2 in possible_splits:
             is_top_heavy = len(line1) > len(line2)
             length_difference = abs(len(line1) - len(line2))
-            score = (is_top_heavy, length_difference)
+            # Score: (not is_top_heavy, length_difference)
+            # When is_top_heavy=True, score starts with False (0) - preferred
+            # When is_top_heavy=False, score starts with True (1) - less preferred
+            score = (not is_top_heavy, length_difference)
             
             if score < best_score:
                 best_score = score
@@ -124,8 +128,8 @@ class TranscriptionGenerator:
             if sentence_words:
                 segments.append({
                     "text": " ".join(w["word"].strip() for w in sentence_words),
-                    "start": sentence_words[0]["start"],
-                    "end": sentence_words[-1]["end"],
+                    "start_time": sentence_words[0]["start"],
+                    "end_time": sentence_words[-1]["end"],
                     "words": sentence_words
                 })
         return segments
@@ -179,8 +183,8 @@ class TranscriptionGenerator:
                     final_text = " ".join(w["word"].strip() for w in words_to_finalize)
                     lines = self.format_multiline_caption(final_text)
                     captions.append({
-                        "start": words_to_finalize[0]["start"],
-                        "end": words_to_finalize[-1]["end"],
+                        "start_time": words_to_finalize[0]["start"],
+                        "end_time": words_to_finalize[-1]["end"],
                         "text": "\n".join(lines),
                         "confidence": np.mean([w.get('probability', 1.0) for w in words_to_finalize])
                     })
@@ -189,8 +193,8 @@ class TranscriptionGenerator:
                 final_text = " ".join(w["word"].strip() for w in current_caption_words)
                 lines = self.format_multiline_caption(final_text)
                 captions.append({
-                    "start": current_caption_words[0]["start"],
-                    "end": current_caption_words[-1]["end"],
+                    "start_time": current_caption_words[0]["start"],
+                    "end_time": current_caption_words[-1]["end"],
                     "text": "\n".join(lines),
                     "confidence": np.mean([w.get('probability', 1.0) for w in current_caption_words])
                 })
@@ -206,8 +210,8 @@ class TranscriptionGenerator:
             final_text = " ".join(w["word"].strip() for w in current_caption_words)
             lines = self.format_multiline_caption(final_text)
             captions.append({
-                "start": current_caption_words[0]["start"],
-                "end": current_caption_words[-1]["end"],
+                "start_time": current_caption_words[0]["start"],
+                "end_time": current_caption_words[-1]["end"],
                 "text": "\n".join(lines),
                 "confidence": np.mean([w.get('probability', 1.0) for w in current_caption_words])
             })

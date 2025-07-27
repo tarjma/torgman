@@ -263,8 +263,8 @@ def create_ass_content(subtitles: List[CaptionData], style_config: SubtitleConfi
     # Create dialogue lines
     dialogue_lines = []
     for sub in subtitles:
-        start_time = _to_ass_time(sub.start)
-        end_time = _to_ass_time(sub.end)
+        start_time = _to_ass_time(sub.start_time)
+        end_time = _to_ass_time(sub.end_time)
         
         # Use translation if available, otherwise use original text
         text = sub.translation if sub.translation else sub.text
