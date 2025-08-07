@@ -50,7 +50,7 @@ class ExportService:
             "type": "export_status", 
             "status": "generating_subtitles", 
             "progress": 15, 
-            "message": "جاري إنشاء ملف الترجمات بالإعدادات المحددة..."
+            "message": "جاري إنشاء ملف الترجمة بالإعدادات المحددة..."
         })
         
         # Generate ASS file with user's configuration
@@ -70,7 +70,7 @@ class ExportService:
             "type": "export_status", 
             "status": "export_started", 
             "progress": 10, 
-            "message": "Starting video export..."
+            "message": "جاري بدء تصدير الفيديو..."
         })
 
         if export_format == "soft":
@@ -88,7 +88,7 @@ class ExportService:
             "type": "export_status",
             "status": "burning_subtitles", 
             "progress": 30, 
-            "message": "Burning subtitles into video..."
+            "message": "جاري دمج الترجمة في الفيديو..."
         })
         
         # Escape the ASS path for ffmpeg (handle special characters)
@@ -123,7 +123,7 @@ class ExportService:
             "type": "export_status",
             "status": "creating_soft_subtitles", 
             "progress": 30, 
-            "message": "Creating video with soft subtitle track..."
+            "message": "جاري إنشاء الفيديو مع الترجمة كأختيار غير أساسى..."
         })
         
         # Run ffmpeg in a thread to avoid blocking
