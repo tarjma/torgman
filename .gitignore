@@ -206,3 +206,5 @@ dist-ssr
 *.mp3
 
 data/
+instructions/
+*.mp4
