@@ -5,9 +5,10 @@ import { useApiKey } from '../hooks/useApiKey';
 interface ApiKeyModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onApiKeyChanged?: () => void;
 }
 
-const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => {
+const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onApiKeyChanged }) => {
   const { status, setApiKey, clearApiKey, isLoading } = useApiKey();
   const [inputApiKey, setInputApiKey] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,6 +25,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => {
       await setApiKey(inputApiKey.trim());
       setInputApiKey('');
       alert('تم حفظ مفتاح API بنجاح!');
+      onApiKeyChanged?.(); // Notify parent component
       onClose();
     } catch (error) {
       console.error('Failed to set API key:', error);
@@ -31,7 +33,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [inputApiKey, setApiKey, onClose]);
+  }, [inputApiKey, setApiKey, onClose, onApiKeyChanged]);
 
   const handleClearApiKey = useCallback(async () => {
     if (confirm('هل أنت متأكد من حذف مفتاح API؟ سيتم استخدام المفتاح من متغيرات النظام إن وجد.')) {
@@ -39,6 +41,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => {
         setIsSubmitting(true);
         await clearApiKey();
         alert('تم حذف مفتاح API بنجاح!');
+        onApiKeyChanged?.(); // Notify parent component
         onClose();
       } catch (error) {
         console.error('Failed to clear API key:', error);
@@ -47,7 +50,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => {
         setIsSubmitting(false);
       }
     }
-  }, [clearApiKey, onClose]);
+  }, [clearApiKey, onClose, onApiKeyChanged]);
 
   if (!isOpen) return null;
 

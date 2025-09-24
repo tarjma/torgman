@@ -10,6 +10,17 @@ export interface YouTubeVideoInfo {
   description?: string;
   available_resolutions?: string[];
   recommended_resolution?: string;
+  resolution_sizes?: Array<{
+    resolution: string;
+    bytes: number;
+    human_size: string;
+    detail?: {
+      type: string;
+      format_id?: string;
+      video_format_id?: string;
+      audio_format_id?: string;
+    };
+  }>;
 }
 
 export interface ProcessYouTubeRequest {

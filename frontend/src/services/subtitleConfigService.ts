@@ -36,14 +36,14 @@ const fallbackConfig: SubtitleConfig = {
   
   // Margins
   margin: {
-    top: 10.0,
-    bottom: 10.0,
+    left: 10.0,
     right: 10.0,
-    left: 10.0
+    vertical: 10.0,
+    top: 10.0,
+    bottom: 10.0
   },
   
   // Legacy compatibility
-  textAlign: 'center',
   padding: '8px 12px',
   borderRadius: '4px',
   lineHeight: '1.4',
@@ -82,6 +82,9 @@ export const subtitleConfigService = {
   },
 
   async translateProjectSubtitles(projectId: string): Promise<void> {
-    await apiClient.post(`/api/projects/${projectId}/translate`);
+    await apiClient.post(`/api/projects/${projectId}/translate`, {
+      source_language: 'en',
+      target_language: 'ar'
+    });
   }
 };

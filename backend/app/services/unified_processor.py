@@ -4,12 +4,13 @@ from pathlib import Path
 
 from ..api.websocket import manager
 from ..core.config import settings
-from ..core.database import get_database
+from ..services.project_manager import get_project_manager
 from .youtube_service import YouTubeVideoProcessor
 from .file_service import VideoFileProcessor
 from .transcription_service import TranscriptionGenerator
 from ..utils.ass_utils import save_ass_file
 from ..api.config import SubtitleConfig
+from ..models.project import CaptionData
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +29,11 @@ class UnifiedVideoProcessor:
             # Send initial status
             await self._send_status(project_id, "downloading_video", 5, f"Downloading YouTube video in {resolution}...")
             
+            # Get video info first for metadata
+            video_info = self.youtube_processor.get_video_info(url)
+            
             # Step 1: Download full video
-            video_path = self.youtube_processor.download_video(url, project_id, resolution)
+            video_path = self.youtube_processor.download_video(url, project_id, resolution, video_info)
             
             await self._send_status(project_id, "downloading_thumbnail", 20, "Downloading video thumbnail...")
             
@@ -49,7 +53,8 @@ class UnifiedVideoProcessor:
                 url, 
                 resolution, 
                 Path(video_path).name if video_path else "",
-                Path(thumbnail_path).name if thumbnail_path else ""
+                Path(thumbnail_path).name if thumbnail_path else "",
+                video_info
             )
             
             # Step 5: Finalize
@@ -72,8 +77,8 @@ class UnifiedVideoProcessor:
             await self._send_status(project_id, "extracting_info", 20, "Extracting video information...")
             
             # Update project status to processing
-            db = await get_database()
-            await db.update_project_status(project_id, "processing", None)
+            project_manager = get_project_manager()
+            project_manager.update_project_status(project_id, "processing", None)
             
             # Step 2: Process audio and generate subtitles
             subtitles = await self._process_audio_and_subtitles(file_path, project_id, 40)
@@ -82,9 +87,11 @@ class UnifiedVideoProcessor:
             project_dir = settings.get_project_dir(project_id)
             self.file_processor._save_project_metadata(project_dir, project_id, file_path)
             
-            # Step 4: Finalize
+            # Step 4: Finalize (include video & thumbnail information if created)
             await self._finalize_processing(project_id, subtitles, {
+                "video_file": Path(file_path).name,
                 "audio_file": f"{project_id}_audio.wav",
+                "thumbnail_file": f"{project_id}_thumbnail.webp",  # May or may not exist; frontend can attempt fetch
                 "subtitle_count": len(subtitles)
             })
         except Exception as e:
@@ -108,38 +115,32 @@ class UnifiedVideoProcessor:
     
     async def _finalize_processing(self, project_id: str, subtitles: list, completion_data: Dict[str, Any]):
         """Common finalization workflow"""
-        # Save subtitles to files and database
         project_dir = settings.get_project_dir(project_id)
+        # Convert raw dict subtitles to CaptionData objects if necessary for downstream utilities
+        processed_subtitles = [
+            s if isinstance(s, CaptionData) else CaptionData(**s) for s in subtitles
+        ]
+        # Save subtitles as JSON (raw dict form is acceptable) and generate ASS file
         self.youtube_processor._save_subtitles(project_dir, subtitles)
-        
-        # Generate and save ASS subtitle file
         try:
-            # Get default subtitle configuration (we'll make this configurable later)
             default_config = SubtitleConfig()
-            ass_path = save_ass_file(project_id, subtitles, default_config)
+            ass_path = save_ass_file(project_id, processed_subtitles, default_config)
             logger.info(f"ASS subtitles saved successfully: {ass_path}")
         except Exception as e:
             logger.error(f"Failed to generate or save ASS subtitles for project {project_id}: {e}")
-            # Don't fail the entire process if ASS generation fails
-        
-        db = await get_database()
-        await db.update_project_status(project_id, "completed", len(subtitles))
-        
-        # Send completion messages
+        db = get_project_manager()
+        db.update_project_status(project_id, "completed", len(subtitles))
         await self._send_status(project_id, "completed", 100, "Processing completed successfully!")
-        
         await manager.send_to_project(project_id, {
             "project_id": project_id,
             "type": "subtitles",
             "data": subtitles
         })
-        
         await manager.send_to_project(project_id, {
             "project_id": project_id,
             "type": "completion",
             "data": completion_data
         })
-        
         logger.info(f"Processing completed for project {project_id}")
     
     async def _send_status(self, project_id: str, status: str, progress: int, message: str):
@@ -164,7 +165,7 @@ class UnifiedVideoProcessor:
         
         # Update project status to failed
         try:
-            db = await get_database()
-            await db.update_project_status(project_id, "failed", None)
+            project_manager = get_project_manager()
+            project_manager.update_project_status(project_id, "failed", None)
         except Exception as db_error:
             logger.error(f"Failed to update project status: {str(db_error)}")

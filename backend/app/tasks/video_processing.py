@@ -63,15 +63,13 @@ async def translate_project_task(
             "progress": progress
         })
         
-        # Translate the text
-        result = await translation_generator.translate_text(
-            subtitle.text, 
-            source_language, 
-            target_language
+        # Translate the text (synchronous call wrapped in thread if needed)
+        # translation_generator currently provides translate_caption (sync).
+        # Run in default loop executor to avoid blocking.
+        translated = await asyncio.get_event_loop().run_in_executor(
+            None, translation_generator.translate_caption, subtitle.text
         )
-        
-        # Update subtitle with translation
-        subtitle.translation = result.get("translated", "")
+        subtitle.translation = translated
         translated_count += 1
         
         # Small delay to prevent overwhelming the API
@@ -119,6 +117,33 @@ async def export_video_task(project_id: str, video_path: str, config):
     if isinstance(config, dict):
         config = SubtitleConfig(**config)
     
-    await export_service.burn_subtitles(project_id, export_format="hard", config=config)
-    
-    logger.info(f"Export task completed for project {project_id}")
+    try:
+        # Perform the export
+        output_filename = await export_service.burn_subtitles(project_id, export_format="hard", config=config)
+        
+        # Send completion notification to frontend
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "export_status",
+            "status": "export_completed",
+            "message": "تم تصدير الفيديو بنجاح! جاري تحضير التحميل...",
+            "progress": 100,
+            "data": {
+                "filename": output_filename,
+                "download_url": f"/api/projects/{project_id}/download-export/{output_filename}"
+            }
+        })
+        
+        logger.info(f"Export task completed for project {project_id}")
+        
+    except Exception as e:
+        logger.error(f"Export task failed for project {project_id}: {e}")
+        
+        # Send failure notification to frontend
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "export_status",
+            "status": "export_failed",
+            "message": f"فشل في تصدير الفيديو: {str(e)}",
+            "progress": 0
+        })

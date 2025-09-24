@@ -28,7 +28,12 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('API Response Error:', error.response?.data || error.message);
+    const data = error.response?.data;
+    if (data?.error === 'MODEL_OVERLOADED' || (error.response?.status === 503 && typeof data === 'object')) {
+        // Attach user-friendly Arabic message
+        error.userMessage = data?.message || 'النموذج مزدحم حالياً، يرجى المحاولة لاحقاً';
+    }
+    console.error('API Response Error:', data || error.message);
     return Promise.reject(error);
   }
 );

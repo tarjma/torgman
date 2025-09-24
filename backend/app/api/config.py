@@ -15,6 +15,9 @@ class CaptionMargin(BaseModel):
     left: float = 10.0  # The left margin, in pixels. Minimum distance from the left edge of the video.
     right: float = 10.0  # The right margin, in pixels. Minimum distance from the right edge of the video.
     vertical: float = 10.0  # The vertical margin, in pixels. For bottom-aligned text, it's the distance from the bottom edge. For top-aligned text, it's the distance from the top edge.
+    # Additional explicit margins for better UI control/persistence
+    bottom: float = 10.0
+    top: float = 10.0
 
 class SubtitleConfig(BaseModel):
     # Basic text properties
@@ -50,6 +53,14 @@ class SubtitleConfig(BaseModel):
     
     # Margins
     margin: Optional[CaptionMargin] = CaptionMargin()
+
+    # Extra UI/preview fields to persist user preferences
+    # These are used by the frontend for live preview and layout and should be persisted.
+    lineHeight: Optional[str] = "1.4"
+    borderRadius: Optional[str] = "4px"
+    padding: Optional[str] = "8px 12px"
+    maxWidth: Optional[str] = "80%"
+    position: Optional[str] = "bottom-center"
 
 class ApiKeyConfig(BaseModel):
     gemini_api_key: str

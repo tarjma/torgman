@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from ..core.config import settings
-from ..core.database import get_database
+from ..services.project_manager import get_project_manager
 from .config import SubtitleConfig
 from .websocket import manager as websocket_manager
 
@@ -15,10 +15,10 @@ router = APIRouter(prefix="/projects", tags=["export"])
 @router.post("/{project_id}/export")
 async def export_project_video(project_id: str, config: SubtitleConfig):
     """Export video with burned-in subtitles"""
-    db = await get_database()
+    project_manager = get_project_manager()
     
     # Check if project exists
-    project = await db.get_project(project_id)
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
@@ -62,10 +62,10 @@ async def export_project_video(project_id: str, config: SubtitleConfig):
 @router.get("/{project_id}/download-export/{filename}")
 async def download_exported_video(project_id: str, filename: str):
     """Download an exported video file"""
-    db = await get_database()
+    project_manager = get_project_manager()
     
     # Check if project exists
-    project = await db.get_project(project_id)
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     

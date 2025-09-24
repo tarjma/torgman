@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { projectService, ProjectData } from '../services/projectService';
 import { youtubeService } from '../services/youtubeService';
-import { webSocketService } from '../services/webSocketService';
+import { globalWebSocketService } from '../services/globalWebSocketService';
 
 // Map backend ProjectData to frontend Project type
 interface Project extends Omit<ProjectData, 'youtube_url' | 'subtitle_count'> {
@@ -14,6 +14,17 @@ interface Project extends Omit<ProjectData, 'youtube_url' | 'subtitle_count'> {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// Central mapping function to keep transformations consistent
+const toFrontendProject = (project: ProjectData, userId: string | undefined): Project => ({
+  ...project,
+  videoTitle: project.title,
+  videoUrl: project.youtube_url,
+  subtitlesCount: project.subtitle_count,
+  userId: userId || 'default',
+  createdAt: project.created_at ? new Date(project.created_at) : new Date(),
+  updatedAt: project.updated_at ? new Date(project.updated_at) : new Date()
+});
 
 export const useProjects = (userId?: string) => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -37,15 +48,7 @@ export const useProjects = (userId?: string) => {
         }
         
         // Transform backend data to frontend format
-        const transformedProjects: Project[] = backendProjects.map(project => ({
-          ...project,
-          videoTitle: project.title,
-          videoUrl: project.youtube_url,
-          subtitlesCount: project.subtitle_count,
-          userId: userId || 'default',
-          createdAt: project.created_at ? new Date(project.created_at) : new Date(),
-          updatedAt: project.updated_at ? new Date(project.updated_at) : new Date()
-        }));
+        const transformedProjects: Project[] = backendProjects.map(p => toFrontendProject(p, userId));
         
         setProjects(transformedProjects);
       } catch (err) {
@@ -102,7 +105,7 @@ export const useProjects = (userId?: string) => {
         });
 
         // Connect to WebSocket for real-time updates
-        await webSocketService.connect(projectId);
+        await globalWebSocketService.connectToProject(projectId);
         
         const newProject: Project = {
           ...projectData,
@@ -135,7 +138,7 @@ export const useProjects = (userId?: string) => {
         console.log('File uploaded successfully');
         
         // Connect to WebSocket for real-time updates
-        await webSocketService.connect(projectId);
+        await globalWebSocketService.connectToProject(projectId);
         
         console.log('WebSocket connected');
         
@@ -186,7 +189,32 @@ export const useProjects = (userId?: string) => {
   }, [projects]);
 
   // Real-time project status updates via WebSocket
-  const updateProjectFromWebSocket = useCallback((projectId: string, updates: Partial<Project>) => {
+  const updateProjectFromWebSocket = useCallback(async (projectId: string, updates: Partial<Project>) => {
+    // If the project is completed, refetch the full project data from backend
+    if (updates.status === 'completed') {
+      try {
+        // Fetch the updated project data from the backend
+        const backendProjects = await projectService.listProjects();
+        const updatedProject = backendProjects.find(p => p.id === projectId);
+        
+        if (updatedProject) {
+          // Transform the backend data to frontend format using central mapper
+          const transformedProject: Project = toFrontendProject(updatedProject, userId);
+          
+          // Update the project with complete data from backend
+          setProjects(prevProjects => 
+            prevProjects.map(project =>
+              project.id === projectId ? transformedProject : project
+            )
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to refetch project data after completion:', error);
+      }
+    }
+    
+    // Fallback to regular update if refetch fails or for other status updates
     setProjects(prevProjects => 
       prevProjects.map(project =>
         project.id === projectId
@@ -194,7 +222,7 @@ export const useProjects = (userId?: string) => {
           : project
       )
     );
-  }, []);
+  }, [userId]);
 
   const deleteProject = useCallback(async (id: string) => {
     try {

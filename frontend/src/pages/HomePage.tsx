@@ -8,6 +8,7 @@ import CreateProjectModal from '../components/CreateProjectModal';
 // Hooks
 import { useProjects } from '../hooks/useProjects';
 import { useVideoProcessor } from '../hooks/useVideoProcessor';
+import { useProjectStatusUpdates } from '../hooks/useProjectStatusUpdates';
 
 // Types
 import { Project } from '../types';
@@ -22,8 +23,12 @@ const HomePageContainer = () => {
   const { 
     projects, 
     createProject, 
-    deleteProject 
+    deleteProject,
+    updateProjectFromWebSocket
   } = useProjects(defaultUserId);
+
+  // Enable real-time project status updates
+  useProjectStatusUpdates(projects, updateProjectFromWebSocket);
 
   const {
     progress

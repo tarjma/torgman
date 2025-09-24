@@ -8,7 +8,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from ..core.config import settings
-from ..core.database import get_database
+from ..services.project_manager import get_project_manager
 from ..models.project import ProjectData
 
 logger = logging.getLogger(__name__)
@@ -18,8 +18,8 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 @router.get("", response_model=List[ProjectData])  # Handle both with and without trailing slash
 async def list_projects(limit: int = 50, offset: int = 0):
     """List all projects with pagination"""
-    db = await get_database()
-    projects = await db.list_projects(limit=limit, offset=offset)
+    project_manager = get_project_manager()
+    projects = project_manager.list_projects(limit=limit, offset=offset)
     # Ensure we always return a list
     if projects is None:
         return []
@@ -28,8 +28,8 @@ async def list_projects(limit: int = 50, offset: int = 0):
 @router.get("/{project_id}", response_model=ProjectData)
 async def get_project(project_id: str):
     """Get a project by ID"""
-    db = await get_database()
-    project = await db.get_project(project_id)
+    project_manager = get_project_manager()
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
@@ -37,32 +37,32 @@ async def get_project(project_id: str):
 @router.delete("/{project_id}")
 async def delete_project(project_id: str):
     """Delete a project and its associated files"""
-    db = await get_database()
+    project_manager = get_project_manager()
     # Check if project exists
-    project = await db.get_project(project_id)
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Delete from database
-    success = await db.delete_project(project_id)
+    # Delete project
+    success = project_manager.delete_project(project_id)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete project from database")
+        raise HTTPException(status_code=500, detail="Failed to delete project")
     
     return {"message": "Project deleted successfully"}
 
 @router.put("/{project_id}/status")
 async def update_project_status(project_id: str, status_data: dict):
     """Update project status"""
-    db = await get_database()
+    project_manager = get_project_manager()
     # Check if project exists
-    project = await db.get_project(project_id)
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
     new_status = status_data.get("status")
     subtitle_count = status_data.get("subtitle_count")
     
-    success = await db.update_project_status(project_id, new_status, subtitle_count)
+    success = project_manager.update_project_status(project_id, new_status, subtitle_count)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update project status")
     
@@ -101,22 +101,25 @@ async def upload_project_file(
         logger.warning(f"Could not get video duration: {e}")
         duration = 0.0
     
-    # Save to database
-    db = await get_database()
+    # Save project data
+    project_manager = get_project_manager()
     project_data = {
         "id": project_id,
         "title": title,
         "description": description,
+        "video_title": title,
         "duration": duration,
-        "status": "processing"
+        "status": "processing",
+        "language": "ar",  # Default language
+        "video_file": f"{project_id}_video{file_extension}"
     }
     
-    success = await db.create_project(project_data)
+    success = project_manager.create_project(project_data)
     if not success:
-        # Clean up file if database creation fails
+        # Clean up file if project creation fails
         if file_path.exists():
             file_path.unlink()
-        raise HTTPException(status_code=500, detail="Failed to create project in database")
+        raise HTTPException(status_code=500, detail="Failed to create project")
 
     # Start background processing
     from ..tasks.video_processing import process_video_file_task
@@ -134,8 +137,8 @@ async def upload_project_file(
 @router.get("/{project_id}/thumbnail")
 async def get_project_thumbnail(project_id: str):
     """Get project thumbnail"""
-    db = await get_database()
-    project = await db.get_project(project_id)
+    project_manager = get_project_manager()
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
@@ -169,13 +172,22 @@ async def get_project_thumbnail(project_id: str):
             media_type=media_type
         )
     
-    raise HTTPException(status_code=404, detail="Thumbnail not found")
+    # Return a tiny transparent PNG placeholder instead of 404 so frontend can always display something
+    import base64
+    transparent_png_base64 = (
+        b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9YpPqVQAAAAASUVORK5CYII="
+    )
+    placeholder_path = project_dir / "_placeholder_thumbnail.png"
+    if not placeholder_path.exists():
+        with open(placeholder_path, 'wb') as ph:
+            ph.write(base64.b64decode(transparent_png_base64))
+    return FileResponse(path=str(placeholder_path), media_type="image/png")
 
 @router.get("/{project_id}/video")
 async def get_project_video(project_id: str):
     """Get project video file"""
-    db = await get_database()
-    project = await db.get_project(project_id)
+    project_manager = get_project_manager()
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     

@@ -7,7 +7,7 @@ import ffmpeg
 from ..api.config import SubtitleConfig
 from ..api.websocket import manager as websocket_manager
 from ..core.config import settings
-from ..core.database import get_database
+from ..services.project_manager import get_project_manager
 from ..utils.ass_utils import save_ass_file
 
 logger = logging.getLogger(__name__)
@@ -35,14 +35,15 @@ class ExportService:
             raise FileNotFoundError("Original video file not found for export.")
         video_path = video_files[0]
         
-        # Get subtitles from database
-        db = await get_database()
-        subtitles = db.get_project_subtitles(project_id)
+        # Get subtitles from project manager
+        project_manager = get_project_manager()
+        subtitles = project_manager.get_project_subtitles(project_id)
         if not subtitles:
             raise ValueError("No subtitles found for this project.")
         
-        # Use provided config or load from saved configuration
-        config = await self._load_saved_subtitle_config()
+        # Use provided config override if passed; otherwise load per-project then global config
+        if config is None:
+            config = await self._load_project_or_global_subtitle_config(project_id)
         logger.info(f"Loaded subtitle configuration {config}")
         
         await websocket_manager.send_to_project(project_id, {
@@ -78,6 +79,15 @@ class ExportService:
         else:
             await self._export_hard_subtitles(video_path, ass_path, output_path, project_id)
 
+        # Send final progress update
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "export_status",
+            "status": "finalizing", 
+            "progress": 90, 
+            "message": "جاري إنهاء عملية التصدير..."
+        })
+
         logger.info(f"Video exported successfully for project {project_id}: {output_path}")
         return output_filename
     
@@ -91,24 +101,35 @@ class ExportService:
             "message": "جاري دمج الترجمة في الفيديو..."
         })
         
-        # Escape the ASS path for ffmpeg (handle special characters)
-        escaped_ass_path = str(ass_path).replace('\\', '\\\\').replace(':', '\\:')
-        
         # Run ffmpeg in a thread to avoid blocking
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._run_hard_subtitle_export, 
-                                   str(video_path), escaped_ass_path, str(output_path), project_id)
+                                   str(video_path), str(ass_path), str(output_path), project_id)
     
     def _run_hard_subtitle_export(self, video_path: str, ass_path: str, output_path: str, project_id: str):
         """Run the actual ffmpeg command for hard subtitles"""
+        # Prefer system-installed custom fonts directory in Docker
+        import os
+        system_fontsdir = "/usr/share/fonts/truetype/custom"
+        fontsdir = system_fontsdir if os.path.isdir(system_fontsdir) else str(settings.fonts_dir)
+
+        # Use ffmpeg-python filter API to avoid quoting/escaping issues
+        in_stream = ffmpeg.input(video_path)
+        # Render ASS subtitles using libass with custom fonts directory
+        subbed_video = in_stream.filter(
+            'subtitles',
+            filename=ass_path,
+            fontsdir=fontsdir
+        )
+
         (
             ffmpeg
-            .input(video_path)
             .output(
+                subbed_video,            # filtered video stream with subtitles
+                in_stream.audio,         # original audio stream preserved
                 output_path,
-                vf=f"ass='{ass_path}'",  # Apply ASS subtitle filter
-                acodec='copy',           # Copy audio without re-encoding
                 vcodec='libx264',        # H.264 video codec
+                acodec='copy',           # Copy audio without re-encoding
                 preset='medium',         # Balance between speed and quality
                 crf=23                   # Constant rate factor for quality
             )
@@ -149,16 +170,23 @@ class ExportService:
             .run(capture_stdout=True, capture_stderr=True)
         )
     
-    async def _load_saved_subtitle_config(self) -> SubtitleConfig:
-        """Load the saved subtitle configuration from the config file"""
+    async def _load_project_or_global_subtitle_config(self, project_id: str) -> SubtitleConfig:
+        """Load subtitle configuration from the project folder if available, otherwise from global config, else defaults."""
         import json
-        
-        config_path = settings.data_dir / "config" / "subtitle-config.json"
-        
-        if config_path.exists():
-            with open(config_path, 'r', encoding='utf-8') as f:
+
+        # Prefer project-level configuration for per-project customization
+        project_config_path = settings.get_project_dir(project_id) / "subtitle-config.json"
+        if project_config_path.exists():
+            with open(project_config_path, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
             return SubtitleConfig(**config_data)
-        else:
-            # Return default configuration if no saved config exists
-            return SubtitleConfig()
+
+        # Fallback to global configuration
+        global_config_path = settings.data_dir / "config" / "subtitle-config.json"
+        if global_config_path.exists():
+            with open(global_config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            return SubtitleConfig(**config_data)
+
+        # Default configuration
+        return SubtitleConfig()

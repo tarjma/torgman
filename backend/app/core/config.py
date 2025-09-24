@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     data_dir: Path = base_dir / "data"  # Main data directory
     projects_dir: Path = data_dir / "projects"  # Each project gets its own folder
     config_dir: Path = data_dir / "config"  # Application configuration files
-    database_path: Path = data_dir / "torgman.db"
     fonts_dir: Path = base_dir / "app" / "assets" / "fonts"  # Directory for custom fonts
     
     # CORS settings
@@ -50,12 +49,14 @@ class Settings(BaseSettings):
     # WebSocket settings
     websocket_timeout: int = 300
 
+    # Optional YouTube cookies file (e.g., exported from browser) to reduce 403 / age restriction issues
+    youtube_cookies_file: str | None = None  # Path as string; user can set via environment variable
+
 # Create settings instance
 settings = Settings()
 
 # Ensure all data directories exist
 settings.data_dir.mkdir(parents=True, exist_ok=True)
-settings.database_path.parent.mkdir(parents=True, exist_ok=True)
 settings.projects_dir.mkdir(parents=True, exist_ok=True)
 settings.config_dir.mkdir(parents=True, exist_ok=True)
 # Note: static_dir is now a property, so we ensure it exists when accessed

@@ -111,8 +111,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setVideoInfoError(null);
 
     try {
-      const info = await youtubeService.getVideoInfo(youtubeUrl);
-      setVideoInfo(info);
+  const info = await youtubeService.getVideoInfo(youtubeUrl);
+  setVideoInfo(info);
       
       // Auto-set title only if not manually set
       if (!isTitleManuallySet && info.title) {
@@ -120,9 +120,15 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       }
       
       // Set recommended resolution if available
-      if (info.recommended_resolution && info.available_resolutions?.includes(info.recommended_resolution)) {
+      const avail = (info.available_resolutions && info.available_resolutions.length > 0)
+        ? info.available_resolutions
+        : (info.resolution_sizes ? info.resolution_sizes.map(r => r.resolution) : []);
+      if (info.recommended_resolution && avail.includes(info.recommended_resolution)) {
         setResolution(info.recommended_resolution);
-      } else if (info.available_resolutions?.length > 0) {
+      } else if (avail.length > 0) {
+        setResolution('best');
+      } else {
+        // Default to best when none listed yet
         setResolution('best');
       }
     } catch (error) {
@@ -177,6 +183,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const getAvailableResolutions = () => {
     if (videoInfo?.available_resolutions && videoInfo.available_resolutions.length > 0) {
       return ['best', ...videoInfo.available_resolutions];
+    }
+    // If resolutions are not explicitly listed, infer from sizes if available
+    if (videoInfo?.resolution_sizes && videoInfo.resolution_sizes.length > 0) {
+      const inferred = videoInfo.resolution_sizes.map(r => r.resolution);
+      return ['best', ...inferred];
     }
     return [];
   };
@@ -467,39 +478,63 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 </div>
               )}
               
-              {/* Video Resolution Selection - Fixed logic */}
-              <div className="space-y-2">
-                <label htmlFor="resolution" className="block text-sm font-medium text-gray-700">
-                  جودة الفيديو
-                </label>
+              {/* Video Resolution & Size Selection */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium text-gray-700">جودة الفيديو</label>
+                  {resolution && videoInfo?.resolution_sizes && (
+                    <span className="text-xs text-gray-600">
+                      الحجم المتوقع: {
+                        (resolution === 'best'
+                          ? videoInfo.resolution_sizes[0]?.human_size
+                          : videoInfo.resolution_sizes.find(r => r.resolution === resolution)?.human_size) || 'غير متوفر'
+                      }
+                    </span>
+                  )}
+                </div>
+                {getAvailableResolutions().length === 0 && (
+                  <p className="text-xs text-gray-500">ستظهر الجودات المتاحة بعد إدخال رابط صحيح</p>
+                )}
+                {getAvailableResolutions().length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {getAvailableResolutions().map(res => {
+                      const sizeObj = videoInfo?.resolution_sizes?.find(r => r.resolution === res) || (res === 'best' ? videoInfo?.resolution_sizes?.[0] : undefined);
+                      const isRecommended = videoInfo?.recommended_resolution === res;
+                      return (
+                        <button
+                          key={res}
+                          type="button"
+                          disabled={isProcessing}
+                          onClick={() => setResolution(res)}
+                          className={`border rounded-lg p-2 text-right transition-colors flex flex-col gap-0.5 ${
+                            resolution === res ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
+                          }`}
+                        >
+                          <span className="text-sm font-medium flex items-center gap-1">
+                            {res === 'best' ? 'أفضل جودة' : res === 'worst' ? 'أقل جودة' : res}
+                            {isRecommended && <span className="text-[10px] bg-blue-600 text-white px-1 rounded">موصى</span>}
+                          </span>
+                          <span className="text-[11px] text-gray-600">{getResolutionLabel(res)}</span>
+                          {sizeObj && (
+                            <span className="text-[11px] text-gray-800 font-semibold">{sizeObj.human_size}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-xs text-gray-500">
+                  جودة أعلى = حجم أكبر ووقت تنزيل أطول، لكن وضوح أفضل. اختر ما يناسب احتياجك.
+                </p>
+                {/* Hidden native select for accessibility / fallback */}
                 <select
-                  id="resolution"
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  disabled={isProcessing || getAvailableResolutions().length === 0}
+                  className="sr-only"
+                  aria-label="اختيار الدقة"
                 >
-                  {getAvailableResolutions().length > 0 ? (
-                    getAvailableResolutions().map((res) => (
-                      <option key={res} value={res}>
-                        {res === 'best' ? 'أفضل جودة متاحة' : 
-                         res === 'worst' ? 'أقل جودة متاحة' : 
-                         `${res} - ${getResolutionLabel(res)}`}
-                        {videoInfo?.recommended_resolution === res && ' (موصى بها)'}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">
-                      {isLoadingVideoInfo ? 'جاري جلب الجودات...' : 'يرجى إدخال رابط صالح أولاً'}
-                    </option>
-                  )}
+                  {getAvailableResolutions().map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
-                <p className="text-xs text-gray-500">
-                  {getAvailableResolutions().length === 0 
-                    ? 'ستظهر الجودات المتاحة بعد إدخال رابط صحيح'
-                    : 'جودة أعلى = ملف أكبر وتحميل أطول، لكن صوت أوضح'
-                  }
-                </p>
               </div>
             </div>
           )}

@@ -11,8 +11,11 @@ export const useAITranslation = () => {
     
     try {
       // Call the real backend API for translation with extended timeout for translations
-      const response = await apiClient.post('/api/projects/translate-text', null, {
-        params: { text },
+      const response = await apiClient.post('/api/subtitles/translate-text', {
+        text: text,
+        source_language: 'en',
+        target_language: 'ar'
+      }, {
         timeout: 120000 // 2 minutes timeout for individual translations
       });
       
@@ -28,16 +31,19 @@ export const useAITranslation = () => {
       return translation;
     } catch (error: any) {
       console.error('Translation API failed:', error);
-      
-      // More specific error messages
+      if (error.userMessage) {
+        throw new Error(error.userMessage);
+      }
       if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        throw new Error('Translation timeout - please try again');
+        throw new Error('انتهت مهلة الترجمة، حاول مرة أخرى');
+      } else if (error.response?.status === 503) {
+        throw new Error('الخدمة غير متاحة حالياً، حاول لاحقاً');
       } else if (error.response?.status === 500) {
-        throw new Error('Translation service error - please try again later');
+        throw new Error('خطأ في خدمة الترجمة، حاول لاحقاً');
       } else if (error.response?.status === 400) {
-        throw new Error('Invalid text for translation');
+        throw new Error('نص غير صالح للترجمة');
       } else {
-        throw new Error('Translation failed - please check your connection');
+        throw new Error('فشل في الترجمة، تحقق من الاتصال');
       }
     } finally {
       setIsTranslating(false);

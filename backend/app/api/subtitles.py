@@ -1,37 +1,47 @@
 import asyncio
 import json
 import logging
-from typing import List, Dict
+from typing import Dict, List
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from ..core.config import settings
-from ..core.database import get_database
 from ..models.project import CaptionData
+from ..services.project_manager import get_project_manager
 from ..services.translation_service import TranslationGenerator
 from .websocket import manager as websocket_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["subtitles"])
 
+class TranslationRequest(BaseModel):
+    text: str
+    source_language: str = "en"
+    target_language: str = "ar"
+
+class ProjectTranslationRequest(BaseModel):
+    source_language: str = "en"
+    target_language: str = "ar"
+
 @router.get("/{project_id}/subtitles", response_model=List[CaptionData])
 async def get_project_subtitles(project_id: str):
     """Get subtitles for a project"""
-    db = await get_database()
+    project_manager = get_project_manager()
     # Check if project exists
-    project = await db.get_project(project_id)
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    subtitles = db.get_project_subtitles(project_id)
+    subtitles = project_manager.get_project_subtitles(project_id)
     return subtitles
 
 @router.put("/{project_id}/subtitles/{subtitle_index}")
 async def update_subtitle(project_id: str, subtitle_index: int, subtitle_data: Dict):
     """Update a specific subtitle by index"""
-    db = await get_database()
+    project_manager = get_project_manager()
     # Check if project exists
-    project = await db.get_project(project_id)
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
@@ -60,9 +70,9 @@ async def update_subtitle(project_id: str, subtitle_index: int, subtitle_data: D
 @router.put("/{project_id}/subtitles")
 async def update_project_subtitles(project_id: str, subtitles_data: List[Dict]):
     """Update all project subtitles"""
-    db = await get_database()
+    project_manager = get_project_manager()
     # Check if project exists
-    project = await db.get_project(project_id)
+    project = project_manager.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
@@ -89,8 +99,8 @@ async def update_project_subtitles(project_id: str, subtitles_data: List[Dict]):
     with open(subtitles_path, 'w', encoding='utf-8') as f:
         json.dump(subtitles_list, f, ensure_ascii=False, indent=2)
     
-    # Update subtitle count in database
-    await db.update_project_status(project_id, "completed", len(subtitles_list))
+    # Update subtitle count in project metadata
+    project_manager.update_project_status(project_id, "completed", len(subtitles_list))
     
     return {
         "message": "Subtitles updated successfully", 
@@ -98,62 +108,68 @@ async def update_project_subtitles(project_id: str, subtitles_data: List[Dict]):
     }
 
 @router.post("/{project_id}/translate")
-async def translate_project_subtitles(project_id: str, request_data: Dict):
-    """Translate all subtitles in a project using AI"""
-    db = await get_database()
-    
-    # Check if project exists
-    project = await db.get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Get current subtitles
-    subtitles = db.get_project_subtitles(project_id)
-    if not subtitles:
-        raise HTTPException(status_code=404, detail="No subtitles found for this project")
-    
-    # Extract source and target languages from request
-    source_language = request_data.get("source_language", "en")
-    target_language = request_data.get("target_language", "ar")
-    
-    logger.info(f"Starting AI translation for project {project_id}: {source_language} -> {target_language}")
-    
-    # Send initial status
-    await websocket_manager.send_to_project(project_id, {
-        "project_id": project_id,
-        "type": "status",
-        "status": "translating",
-        "message": f"بدء ترجمة {len(subtitles)} جملة..."
-    })
-    
-    # Start translation task in background
-    from ..tasks.video_processing import translate_project_task
-    asyncio.create_task(translate_project_task(
-        project_id, 
-        subtitles, 
-        source_language, 
-        target_language
-    ))
-    
+async def translate_project_subtitles(project_id: str, request: ProjectTranslationRequest):
+    """Kick off one-shot translation in the background to avoid HTTP timeouts.
+    Progress and results are delivered over the project's WebSocket channel."""
+    project_manager = get_project_manager()
+
+    async def _background_translate():
+        # Load subtitles
+        subs = project_manager.get_project_subtitles(project_id)
+        logger.info(f"One-shot translation for project {project_id} to {request.target_language}, segments={len(subs)}")
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "status",
+            "status": "translating",
+            "message": f"جاري ترجمة {len(subs)} جملة دفعة واحدة...",
+            "progress": 5
+        })
+        translation_generator = TranslationGenerator()
+        loop = asyncio.get_event_loop()
+        translated = await loop.run_in_executor(
+            None,
+            translation_generator.translate_transcription,
+            subs,
+            request.source_language,
+            request.target_language,
+        )
+        project_dir = settings.get_project_dir(project_id)
+        subtitles_path = project_dir / "subtitles.json"
+        with open(subtitles_path, 'w', encoding='utf-8') as f:
+            json.dump([s.model_dump() for s in translated], f, ensure_ascii=False, indent=2)
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "subtitles",
+            "data": [s.model_dump() for s in translated]
+        })
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "status",
+            "status": "translation_completed",
+            "message": f"اكتملت ترجمة {len(translated)} جملة.",
+            "progress": 100
+        })
+
+    asyncio.create_task(_background_translate())
     return {
-        "message": "Translation started successfully",
+        "message": "Translation started",
         "project_id": project_id,
-        "subtitle_count": len(subtitles),
-        "source_language": source_language,
-        "target_language": target_language
+        "status": "translating",
+        "source_language": request.source_language,
+        "target_language": request.target_language
     }
 
 @router.post("/translate-text")
-async def translate_text_endpoint(request_data: Dict):
+async def translate_text_endpoint(request: TranslationRequest):
     """Translate a single piece of text"""
-    text = request_data.get("text", "")
-    source_language = request_data.get("source_language", "en")
-    target_language = request_data.get("target_language", "ar")
-    
-    if not text.strip():
+    if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text is required")
     
     translation_generator = TranslationGenerator()
-    result = await translation_generator.translate_text(text, source_language, target_language)
-    
-    return result
+    # Single caption translation (sync) executed in thread to avoid blocking if needed
+    import asyncio
+    loop = asyncio.get_event_loop()
+    translated = await loop.run_in_executor(
+        None, translation_generator.translate_caption, request.text, request.source_language, request.target_language
+    )
+    return {"translation": translated}

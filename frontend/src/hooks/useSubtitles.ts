@@ -20,8 +20,9 @@ export const useSubtitles = () => {
   const [currentTime, setCurrentTime] = useState(0);
 
   const addSubtitle = useCallback((startTime: number, endTime: number, text: string = '') => {
+    // Use UUIDs to avoid collisions when creating multiple subtitles quickly
     const newSubtitle: Subtitle = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       start_time: startTime,
       end_time: endTime,
       text: text,
@@ -59,7 +60,8 @@ export const useSubtitles = () => {
     if (subtitle) {
       const newSubtitle: Subtitle = {
         ...subtitle,
-        id: Date.now().toString(),
+        // Ensure a new unique ID for the duplicated subtitle
+        id: crypto.randomUUID(),
         start_time: subtitle.end_time,
         end_time: subtitle.end_time + (subtitle.end_time - subtitle.start_time)
       };
@@ -84,7 +86,12 @@ export const useSubtitles = () => {
   }, [subtitles, currentTime]);
 
   const findPreviousSubtitle = useCallback(() => {
-    return subtitles.reverse().find(sub => sub.end_time < currentTime);
+    // Avoid mutating the original subtitles array; iterate from the end
+    for (let i = subtitles.length - 1; i >= 0; i--) {
+      const sub = subtitles[i];
+      if (sub.end_time < currentTime) return sub;
+    }
+    return undefined;
   }, [subtitles, currentTime]);
 
   const seekToSubtitle = useCallback((subtitleId: string) => {

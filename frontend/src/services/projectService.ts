@@ -16,11 +16,16 @@ export interface ProjectData {
 }
 
 export interface CaptionData {
-  start: number;
-  end: number;
+  // New canonical fields from backend
+  start_time?: number;
+  end_time?: number;
+  // Legacy fields kept for backward compatibility with older responses
+  start?: number;
+  end?: number;
   text: string;
   confidence?: number;
   translation?: string;
+  id?: string;
 }
 
 export const projectService = {
@@ -129,7 +134,10 @@ export const projectService = {
   },
 
   async translateProjectSubtitles(projectId: string): Promise<void> {
-    await apiClient.post(`/api/projects/${projectId}/translate`);
+    await apiClient.post(`/api/projects/${projectId}/translate`, {
+      source_language: 'en',
+      target_language: 'ar'
+    });
   },
 
   async exportVideoWithSubtitles(

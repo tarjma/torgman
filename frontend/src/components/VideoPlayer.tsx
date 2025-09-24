@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize, SkipBack, SkipForward, Settings, Subtitles, Gauge } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, SkipBack, SkipForward, Subtitles, Gauge } from 'lucide-react';
 import { Subtitle } from '../types';
 import { formatTime } from '../utils/exportUtils';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
@@ -34,6 +34,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
   const [showSubtitleConfig, setShowSubtitleConfig] = useState(false);
+  const [intrinsicSize, setIntrinsicSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [renderedSize, setRenderedSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   
   // Use global subtitle configuration
   const { config: subtitleConfig } = useSubtitleConfig();
@@ -55,6 +57,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const newDuration = videoRef.current.duration;
       setDuration(newDuration);
       onDurationChange?.(newDuration);
+      // Capture intrinsic video dimensions
+      setIntrinsicSize({ width: videoRef.current.videoWidth || 0, height: videoRef.current.videoHeight || 0 });
+      // Capture rendered size
+      const rect = videoRef.current.getBoundingClientRect();
+      setRenderedSize({ width: rect.width, height: rect.height });
     }
   }, [onDurationChange]);
 
@@ -70,6 +77,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       videoRef.current.currentTime = currentTime;
     }
   }, [currentTime]);
+
+  // Track rendered video element size (on resize and metadata load)
+  useEffect(() => {
+    const updateRendered = () => {
+      if (!videoRef.current) return;
+      const rect = videoRef.current.getBoundingClientRect();
+      setRenderedSize({ width: rect.width, height: rect.height });
+    };
+    updateRendered();
+    window.addEventListener('resize', updateRendered);
+    return () => window.removeEventListener('resize', updateRendered);
+  }, []);
 
   const togglePlay = useCallback(() => {
     if (videoRef.current) {
@@ -147,6 +166,28 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Compute scale factor between rendered and intrinsic height to align preview with export baseline
+  const heightScale = React.useMemo(() => {
+    const iw = intrinsicSize.width || 0;
+    const ih = intrinsicSize.height || 0;
+    const rw = renderedSize.width || 0;
+    const rh = renderedSize.height || 0;
+    if (!iw || !ih || !rw || !rh) return 1;
+    const scale = Math.min(rw / iw, rh / ih);
+    return scale > 0 && Number.isFinite(scale) ? scale : 1;
+  }, [intrinsicSize.width, intrinsicSize.height, renderedSize.width, renderedSize.height]);
+
+  const computePx = (value?: number) => {
+    if (value == null) return 0;
+    return Math.round(value * heightScale);
+  };
+
+  const parseFontPx = (val?: string) => {
+    if (!val) return 28;
+    const n = parseFloat(String(val).replace('px', '').replace('pt', ''));
+    return Number.isFinite(n) ? n : 28;
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -222,17 +263,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             } left-1/2 transform -translate-x-1/2`}
             style={{
               fontFamily: subtitleConfig.fontFamily,
-              fontSize: subtitleConfig.fontSize,
+              fontSize: `${computePx(parseFontPx(subtitleConfig.fontSize))}px`,
               fontWeight: subtitleConfig.fontWeight,
               color: subtitleConfig.color,
               backgroundColor: subtitleConfig.backgroundColor,
               textAlign: 'center',
               padding: subtitleConfig.padding,
               borderRadius: subtitleConfig.borderRadius,
-              textShadow: subtitleConfig.textShadow,
               lineHeight: subtitleConfig.lineHeight,
               maxWidth: subtitleConfig.maxWidth,
-              margin: `${subtitleConfig.margin.top}px ${subtitleConfig.margin.right}px ${subtitleConfig.margin.bottom}px ${subtitleConfig.margin.left}px`,
+              margin: `${computePx(subtitleConfig.margin.top ?? subtitleConfig.margin.vertical ?? 10)}px ${computePx(subtitleConfig.margin.right)}px ${computePx(subtitleConfig.margin.bottom ?? subtitleConfig.margin.vertical ?? 10)}px ${computePx(subtitleConfig.margin.left)}px`,
               whiteSpace: 'pre-wrap' as const,
               direction: 'rtl' as const
             }}

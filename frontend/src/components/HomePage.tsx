@@ -21,7 +21,12 @@ const HomePage: React.FC<HomePageProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-  const { status: apiKeyStatus } = useApiKey();
+  const { status: apiKeyStatus, reloadStatus } = useApiKey();
+
+  // Handle modal close
+  const handleCloseApiKeyModal = () => {
+    setShowApiKeyModal(false);
+  };
 
   // Filter projects based on search query
   const filteredProjects = projects.filter(project => 
@@ -157,7 +162,8 @@ const HomePage: React.FC<HomePageProps> = ({
       {/* API Key Configuration Modal */}
       <ApiKeyModal 
         isOpen={showApiKeyModal} 
-        onClose={() => setShowApiKeyModal(false)} 
+        onClose={handleCloseApiKeyModal}
+        onApiKeyChanged={reloadStatus}
       />
     </div>
   );

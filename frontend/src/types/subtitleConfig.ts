@@ -2,6 +2,9 @@ export interface CaptionMargin {
   left: number;
   right: number;
   vertical: number;
+  // Add compatibility for bottom margin
+  bottom?: number;
+  top?: number;
 }
 
 export interface SubtitleConfig {
@@ -39,4 +42,10 @@ export interface SubtitleConfig {
   // Margins
   margin: CaptionMargin;
   
+  // Legacy/Additional properties for UI compatibility
+  lineHeight?: string;     // Line height for CSS
+  borderRadius?: string;   // Border radius for CSS
+  padding?: string;        // Padding for CSS
+  maxWidth?: string;       // Max width for CSS
+  position?: string;       // Position setting
 }

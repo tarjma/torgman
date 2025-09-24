@@ -1,4 +1,6 @@
 import logging
+from google.genai.errors import ServerError
+from fastapi.responses import JSONResponse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +12,6 @@ from .api.fonts import router as fonts_router
 from .api.subtitles import router as subtitles_router
 from .api.export import router as export_router
 from .core.config import settings
-from .core.database import get_database
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +37,47 @@ app.include_router(config_router, prefix=settings.api_prefix)
 app.include_router(fonts_router, prefix=settings.api_prefix)
 app.include_router(websocket_router)
 
+# Global handler for Gemini server errors (e.g., 503 overloaded)
+@app.exception_handler(ServerError)
+async def gemini_server_error_handler(request, exc: ServerError):
+    # Extract project id if present in path
+    path = request.url.path
+    project_id = None
+    parts = path.split("/")
+    # Expect pattern /api/projects/{project_id}/translate
+    try:
+        if "projects" in parts:
+            idx = parts.index("projects")
+            if len(parts) > idx + 1:
+                project_id = parts[idx + 1]
+    except ValueError:
+        pass
+
+    arabic_msg = "النموذج مزدحم حالياً ولا يمكن إكمال الترجمة الآن. يرجى المحاولة لاحقاً."  # Overloaded model message
+    detail = {
+        "error": "MODEL_OVERLOADED",
+        "status_code": exc.status_code if hasattr(exc, 'status_code') else 503,
+        "message": arabic_msg,
+        "original": getattr(exc, 'args', [''])[0]
+    }
+
+    # Try to notify via websocket if project id available
+    if project_id:
+        try:
+            from .api.websocket import manager as websocket_manager
+            await websocket_manager.send_to_project(project_id, {
+                "project_id": project_id,
+                "type": "status",
+                "status": "translation_failed",
+                "message": arabic_msg,
+                "progress": 0
+            })
+        except Exception as ws_err:
+            logger.error(f"Failed to send websocket error notification: {ws_err}")
+
+    logger.error(f"Gemini ServerError intercepted: {detail}")
+    return JSONResponse(status_code=503, content=detail)
+
 # Add explicit routes for trailing slash issues
 @app.get("/api/projects")
 async def list_projects_no_slash(limit: int = 50, offset: int = 0):
@@ -46,8 +88,9 @@ async def list_projects_no_slash(limit: int = 50, offset: int = 0):
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database and debug routes"""
-    await get_database()  # Initialize database
+    """Initialize application and debug routes"""
+    # Ensure projects directory exists
+    settings.projects_dir.mkdir(parents=True, exist_ok=True)
     
     # Debug: Print registered routes
     logger.info("=== Registered Routes ===")

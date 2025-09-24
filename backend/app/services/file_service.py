@@ -59,9 +59,46 @@ class VideoFileProcessor(BaseVideoProcessor):
         
     def _save_project_metadata(self, project_dir: Path, project_id: str, file_path: str) -> None:
         """Save file-specific project metadata"""
+        # Extract basic video info so UI can display a proper title instead of 'Untitled'
+        info = self.get_video_info(str(file_path))
+        # Attempt to create a thumbnail for the uploaded file
+        thumbnail_name = self.generate_thumbnail(project_dir, project_id, str(file_path))
+        # Persist minimal set of fields similar to YouTube processor output for consistency
         super()._save_project_metadata(
-            project_dir, 
-            project_id, 
+            project_dir,
+            project_id,
             original_file=str(file_path),
-            audio_file=f"{project_id}_audio.wav"
+            audio_file=f"{project_id}_audio.wav",
+            video_file=Path(file_path).name,
+            thumbnail_file=thumbnail_name if thumbnail_name else None,
+            title=info.get("title"),            # Used by frontend as main display title
+            video_title=info.get("title"),      # Keep parallel naming with youtube flow
+            duration=int(info.get("duration") or 0),
+            format=info.get("format"),
+            width=info.get("width"),
+            height=info.get("height")
         )
+
+    def generate_thumbnail(self, project_dir: Path, project_id: str, video_path: str) -> str | None:
+        """Generate a single thumbnail image (webp) from the uploaded video.
+        Picks a frame at 1 second (or 0 if shorter). Returns filename or None if it fails."""
+        try:
+            thumbnail_filename = f"{project_id}_thumbnail.webp"
+            output_path = project_dir / thumbnail_filename
+            (
+                ffmpeg
+                .input(video_path, ss=1)
+                .filter('scale', 'iw', 'ih')  # Keep original size
+                .output(str(output_path), vframes=1, format='webp', vf='thumbnail')
+                .overwrite_output()
+                .run(capture_stdout=True, capture_stderr=True)
+            )
+            if output_path.exists():
+                logger.info(f"Generated thumbnail for project {project_id}: {output_path}")
+                return thumbnail_filename
+        except ffmpeg.Error as e:
+            msg = e.stderr.decode() if e.stderr else str(e)
+            logger.warning(f"Thumbnail generation failed for {video_path}: {msg}")
+        except Exception as e:
+            logger.warning(f"Unexpected error during thumbnail generation for {video_path}: {e}")
+        return None
