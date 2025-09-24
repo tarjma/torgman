@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize, SkipBack, SkipForward, Subtitles, Gauge } from 'lucide-react';
+import { Play, Pause, Volume, Volume1, Volume2, VolumeX, Maximize, SkipBack, SkipForward, Captions, CaptionsOff, Gauge, Languages } from 'lucide-react';
 import { Subtitle } from '../types';
 import { formatTime } from '../utils/exportUtils';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
@@ -13,6 +13,9 @@ interface VideoPlayerProps {
   onTimeUpdate: (time: number) => void;
   onDurationChange?: (duration: number) => void;
   onFullscreen?: () => void;
+  // Optional ISO-like language codes for badge labels (e.g., 'EN', 'AR')
+  sourceLangCode?: string;
+  targetLangCode?: string;
 }
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -22,6 +25,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   currentTime,
   onTimeUpdate,
   onDurationChange,
+  sourceLangCode = 'EN',
+  targetLangCode = 'AR',
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -31,6 +36,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [duration, setDuration] = useState(0);
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [showSubtitles, setShowSubtitles] = useState(true);
+  // Two-state language toggle: false = source, true = target (translated)
+  const [showTranslated, setShowTranslated] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem('torgman_show_translated');
+      return v === null ? true : v === '1';
+    } catch {
+      return true;
+    }
+  });
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
   const [showSubtitleConfig, setShowSubtitleConfig] = useState(false);
@@ -39,6 +53,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   
   // Use global subtitle configuration
   const { config: subtitleConfig } = useSubtitleConfig();
+
+  // Persist toggle choice
+  useEffect(() => {
+    try {
+      localStorage.setItem('torgman_show_translated', showTranslated ? '1' : '0');
+    } catch {}
+  }, [showTranslated]);
 
   // Create video URL from file
   useEffect(() => {
@@ -152,6 +173,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     currentTime >= sub.start_time && currentTime <= sub.end_time
   );
 
+  // Resolve displayed text based on toggle
+  const getDisplayedText = useCallback(() => {
+    if (!currentSubtitle) return '';
+    if (showTranslated) {
+      // Prefer translated fields
+      return currentSubtitle.translatedText || currentSubtitle.translation || currentSubtitle.text || currentSubtitle.originalText || '';
+    }
+    // Source/original
+    return currentSubtitle.originalText || currentSubtitle.text || currentSubtitle.translatedText || currentSubtitle.translation || '';
+  }, [currentSubtitle, showTranslated]);
+
   const toggleFullscreen = useCallback(() => {
     if (containerRef.current) {
       if (document.fullscreenElement) {
@@ -232,6 +264,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           e.preventDefault();
           toggleFullscreen();
           break;
+        case 'l':
+        case 'L':
+          e.preventDefault();
+          setShowTranslated(prev => !prev);
+          break;
       }
     };
 
@@ -277,9 +314,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
               direction: 'rtl' as const
             }}
           >
-            <div>
-              {currentSubtitle.translatedText || currentSubtitle.text || currentSubtitle.originalText}
-            </div>
+            <div>{getDisplayedText()}</div>
           </div>
         )}
 
@@ -388,7 +423,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 className="p-2 hover:bg-white/20 rounded-lg transition-all duration-200"
                 title={isMuted ? 'إلغاء الكتم' : 'كتم الصوت'}
               >
-                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                {isMuted || volume === 0 ? (
+                  <VolumeX className="w-4 h-4" />
+                ) : volume < 0.34 ? (
+                  <Volume className="w-4 h-4" />
+                ) : volume < 0.67 ? (
+                  <Volume1 className="w-4 h-4" />
+                ) : (
+                  <Volume2 className="w-4 h-4" />
+                )}
               </button>
               <input
                 type="range"
@@ -401,20 +444,35 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
               />
             </div>
             
-            {/* Subtitle Toggle */}
+            {/* Subtitle Visibility Toggle */}
             <button
               onClick={() => setShowSubtitles(!showSubtitles)}
-              className={`p-2 rounded-lg transition-all duration-200 relative ${
+              className={`p-2 rounded-lg transition-all duration-200 ${
                 showSubtitles ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-white/20'
               }`}
-              title={`${showSubtitles ? 'إخفاء' : 'إظهار'} الترجمات (${subtitles.length})`}
+              title={showSubtitles ? 'إخفاء الترجمات' : 'إظهار الترجمات'}
+              aria-label={showSubtitles ? 'إخفاء الترجمات' : 'إظهار الترجمات'}
             >
-              <Subtitles className="w-4 h-4" />
-              {subtitles.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold text-[10px]">
-                  {subtitles.length}
-                </span>
+              {showSubtitles ? (
+                <Captions className="w-4 h-4" />
+              ) : (
+                <CaptionsOff className="w-4 h-4" />
               )}
+            </button>
+
+            {/* Language Toggle (Source <-> Target) */}
+            <button
+              onClick={() => setShowTranslated(prev => !prev)}
+              className={`p-2 rounded-lg transition-all duration-200 relative ${
+                showTranslated ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-white/20'
+              }`}
+              title={showTranslated ? 'عرض الأصل' : 'عرض الترجمة'}
+              aria-label={showTranslated ? 'عرض الأصل' : 'عرض الترجمة'}
+            >
+              <Languages className="w-4 h-4" />
+              <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[10px] rounded px-1 py-0.5 leading-none font-bold">
+                {showTranslated ? (targetLangCode || 'AR') : (sourceLangCode || 'EN')}
+              </span>
             </button>
             
             <button
