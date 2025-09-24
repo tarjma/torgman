@@ -2,7 +2,7 @@
 
 A tool that aims to be a central hub for any translation project anyone wants to do 👳
 <center>
-   <img width="842" height="614" alt="Torgman GIF" src="https://github.com/user-attachments/assets/15093291-bf4e-4f02-85be-5a7e427abd6d" />
+   <img width="842" height="614" alt="Torgman GIF" src="https://github.com/user-attachments/assets/91a5c236-b60e-4ff2-82f5-c3ce2ff0dfff" />
 </center>
 
 ## ⚡ How to start ?
