@@ -47,7 +47,8 @@ export interface VideoInfo {
   url?: string;
   duration: number;
   title: string;
-  language: string;
+  language: string; // legacy (target language context not needed but kept)
+  source_language?: string; // newly added for detected original language
 }
 
 export interface AITranslation {
@@ -81,8 +82,10 @@ export interface Project {
   videoFile?: string;
   subtitlesCount: number;
   duration: number;
-  language: string;
-  status: 'draft' | 'processing' | 'completed' | 'error'; // Updated to match backend
+  // Renamed backend field: source_language
+  source_language?: string; // new preferred
+  language?: string; // legacy fallback
+  status: 'draft' | 'processing' | 'completed' | 'error';
   createdAt: Date;
   updatedAt: Date;
   userId: string;
@@ -97,7 +100,8 @@ export interface BackendProject {
   youtube_url?: string;
   duration: number;
   status: 'draft' | 'processing' | 'completed' | 'error';
-  language: string;
+  source_language?: string; // new
+  language?: string; // legacy
   subtitle_count: number;
   created_at?: string;
   updated_at?: string;

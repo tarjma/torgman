@@ -110,7 +110,8 @@ async def upload_project_file(
         "video_title": title,
         "duration": duration,
         "status": "processing",
-        "language": "ar",  # Default language
+        # Source language unknown at upload time; will be updated after Whisper transcription
+        "source_language": "en",
         "video_file": f"{project_id}_video{file_extension}"
     }
     
