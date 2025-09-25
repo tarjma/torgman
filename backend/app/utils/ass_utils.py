@@ -293,6 +293,8 @@ def create_ass_content(subtitles: List[CaptionData], style_config: SubtitleConfi
     
     # Create dialogue lines
     dialogue_lines = []
+    RLE = "\u202B"  # Right-to-Left Embedding
+    PDF = "\u202C"  # Pop Directional Formatting
     for sub in subtitles:
         start_time = _to_ass_time(sub.start_time)
         end_time = _to_ass_time(sub.end_time)
@@ -301,7 +303,9 @@ def create_ass_content(subtitles: List[CaptionData], style_config: SubtitleConfi
         text = sub.translation if sub.translation else sub.text
         if text:
             # Escape text for ASS format and handle line breaks
-            text = text.replace('\n', '\\N').replace('{', '\\{').replace('}', '\\}')
+            # Wrap with bidi embedding marks first (they are control chars, not rendered)
+            text_wrapped = f"{RLE}{text}{PDF}"
+            text = text_wrapped.replace('\n', '\\N').replace('{', '\\{').replace('}', '\\}')
             dialogue_lines.append(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}")
     
     # Assemble the full ASS file content with fixed PlayRes baseline (1280x720)
