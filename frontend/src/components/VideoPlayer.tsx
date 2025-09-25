@@ -25,7 +25,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   currentTime,
   onTimeUpdate,
   onDurationChange,
-  sourceLangCode = 'EN',
+  sourceLangCode,
   targetLangCode = 'AR',
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -471,7 +471,35 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             >
               <Languages className="w-4 h-4" />
               <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[10px] rounded px-1 py-0.5 leading-none font-bold">
-                {showTranslated ? (targetLangCode || 'AR') : (sourceLangCode || 'EN')}
+                {(() => {
+                  // Normalize codes to short uppercase labels for badge
+                  const normalize = (code: string | undefined, fallback: string) => {
+                    if (!code) return fallback;
+                    // Accept formats like 'en', 'en-US', 'english'
+                    const lowered = code.trim().toLowerCase();
+                    // If hyphenated like en-us take first part
+                    const base = lowered.split(/[-_]/)[0];
+                    // Known mappings (extend if needed)
+                    const map: Record<string, string> = {
+                      english: 'EN',
+                      arabic: 'AR',
+                      ar: 'AR',
+                      en: 'EN',
+                      fr: 'FR',
+                      es: 'ES',
+                      de: 'DE',
+                      it: 'IT',
+                      ja: 'JA',
+                      zh: 'ZH'
+                    };
+                    if (map[base]) return map[base];
+                    // Fallback: take first two letters
+                    return base.slice(0, 2).toUpperCase();
+                  };
+                  const src = normalize(sourceLangCode, '??');
+                  const tgt = normalize(targetLangCode, 'AR');
+                  return showTranslated ? tgt : src;
+                })()}
               </span>
             </button>
             

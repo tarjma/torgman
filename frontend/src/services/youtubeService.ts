@@ -26,7 +26,8 @@ export interface YouTubeVideoInfo {
 export interface ProcessYouTubeRequest {
   url: string;
   project_id: string;
-  language: string;
+  // Legacy field kept optional for backward compatibility; backend now derives source language automatically
+  language?: string;
   resolution?: string;
   video_info?: YouTubeVideoInfo; // Optional field to pass pre-fetched video info
 }

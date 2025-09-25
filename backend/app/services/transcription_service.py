@@ -219,7 +219,12 @@ class TranscriptionGenerator:
         return captions
 
     def generate_transcription(self, audio_path: str) -> List[Dict[str, Any]]:
-        """Public method to transcribe an audio file and generate formatted captions."""
+        """Public method to transcribe an audio file and generate formatted captions.
+
+        NOTE: Whisper returns a detected language code in result.get('language'). We will attach it
+        to each caption only via project metadata update elsewhere (UnifiedVideoProcessor) rather than
+        mutating caption objects here to keep payload minimal.
+        """
         
         logger.info(f"Transcribing audio file: {audio_path}")
         if not Path(audio_path).exists():
@@ -228,9 +233,11 @@ class TranscriptionGenerator:
         
         # Whisper output gives us segments, but we want a flat list of words for processing.
         result = self.whisper_model.transcribe(audio_path, word_timestamps=True)
-        
+        # Store detected language for external access if needed
+        self.last_detected_language = result.get("language") or "en"
+
         all_words = [word for segment in result["segments"] for word in segment.get("words", [])]
-        
+
         if not all_words:
             logger.warning("Whisper did not detect any words in the audio.")
             return []

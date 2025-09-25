@@ -211,14 +211,16 @@ const ProjectEditorPage = () => {
             url: videoUrl,
             duration: foundProject.duration,
             title: foundProject.videoTitle,
-            language: foundProject.language || 'ar'
+            language: 'ar',
+            source_language: (foundProject as any).source_language || (foundProject as any).language || 'en'
           });
         } else if (foundProject?.videoFile) {
           setVideoInfo({
             url: `/api/projects/${projectId}/video`,
             title: foundProject.videoTitle,
             duration: foundProject.duration,
-            language: foundProject.language || 'ar'
+            language: 'ar',
+            source_language: (foundProject as any).source_language || (foundProject as any).language || 'en'
           });
         } else {
           // Try to load video URL directly even if project not in list
@@ -591,6 +593,7 @@ const ProjectEditorPage = () => {
             currentTime={currentTime}
             onTimeUpdate={handleTimeUpdate}
             onDurationChange={(duration) => console.log('Duration:', duration)}
+            sourceLangCode={project?.source_language || project?.language || (videoInfo as any).language}
           />
         </div>
       </div>

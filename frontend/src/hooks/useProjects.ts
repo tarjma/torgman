@@ -99,7 +99,6 @@ export const useProjects = (userId?: string) => {
         await youtubeService.processVideo({
           url: projectData.videoUrl,
           project_id: projectId,
-          language: projectData.language || 'ar',
           resolution,
           video_info: videoInfo // Pass pre-fetched video info
         });
@@ -131,8 +130,7 @@ export const useProjects = (userId?: string) => {
           videoFile,
           projectId,
           projectData.title,
-          projectData.description,
-          projectData.language || 'ar'
+          projectData.description
         );
         
         console.log('File uploaded successfully');

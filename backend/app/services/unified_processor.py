@@ -110,7 +110,6 @@ class UnifiedVideoProcessor:
         
         # Generate subtitles
         subtitles = self.subtitle_generator.generate_transcription(audio_path)
-        
         return subtitles
     
     async def _finalize_processing(self, project_id: str, subtitles: list, completion_data: Dict[str, Any]):
@@ -129,6 +128,13 @@ class UnifiedVideoProcessor:
         except Exception as e:
             logger.error(f"Failed to generate or save ASS subtitles for project {project_id}: {e}")
         db = get_project_manager()
+        # Persist detected source language once (after metadata writes by processors)
+        detected_lang = getattr(self.subtitle_generator, 'last_detected_language', None)
+        if detected_lang:
+            try:
+                db.update_project_metadata(project_id, source_language=detected_lang)
+            except Exception as e:
+                logger.error(f"Failed to persist detected language for project {project_id}: {e}")
         db.update_project_status(project_id, "completed", len(subtitles))
         await self._send_status(project_id, "completed", 100, "Processing completed successfully!")
         await manager.send_to_project(project_id, {
