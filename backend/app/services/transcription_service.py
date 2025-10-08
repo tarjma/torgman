@@ -218,6 +218,46 @@ class TranscriptionGenerator:
             
         return captions
 
+    def regenerate_captions_with_params(
+        self,
+        words: List[Dict],
+        max_chars_per_line: int,
+        max_lines_per_caption: int,
+        max_caption_duration: int,
+        max_cps: int
+    ) -> List[Dict[str, Any]]:
+        """Regenerate captions from existing word data with custom parameters."""
+        logger.info(f"Regenerating captions with params: chars={max_chars_per_line}, lines={max_lines_per_caption}, duration={max_caption_duration}, cps={max_cps}")
+        
+        # Temporarily override instance parameters
+        original_params = {
+            'max_chars_per_line': self.max_chars_per_line,
+            'max_lines_per_caption': self.max_lines_per_caption,
+            'max_caption_duration': self.max_caption_duration,
+            'max_cps': self.max_cps,
+            'max_caption_length': self.max_caption_length
+        }
+        
+        # Set new parameters
+        self.max_chars_per_line = max_chars_per_line
+        self.max_lines_per_caption = max_lines_per_caption
+        self.max_caption_duration = max_caption_duration
+        self.max_cps = max_cps
+        self.max_caption_length = max_chars_per_line * max_lines_per_caption
+        
+        # Generate captions with new parameters
+        captions = self.generate_captions(words)
+        
+        # Restore original parameters
+        self.max_chars_per_line = original_params['max_chars_per_line']
+        self.max_lines_per_caption = original_params['max_lines_per_caption']
+        self.max_caption_duration = original_params['max_caption_duration']
+        self.max_cps = original_params['max_cps']
+        self.max_caption_length = original_params['max_caption_length']
+        
+        logger.info(f"Regenerated {len(captions)} caption segments")
+        return captions
+
     def generate_transcription(self, audio_path: str) -> List[Dict[str, Any]]:
         """Public method to transcribe an audio file and generate formatted captions.
 

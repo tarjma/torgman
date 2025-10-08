@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, Palette, MonitorSpeaker, RotateCcw, ChevronDown, ChevronUp, Save, X } from 'lucide-react';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
 import FontSelector from './FontSelector';
 import FontWeightSelector from './FontWeightSelector';
+import { SubtitleConfig } from '../types/subtitleConfig';
 
 interface GlobalSubtitleSettingsProps {
   isOpen: boolean;
@@ -59,8 +60,7 @@ const GlobalSubtitleSettings: React.FC<GlobalSubtitleSettingsProps> = ({
   className = '' 
 }) => {
   const { config, updateConfig, resetConfig } = useSubtitleConfig();
-  const [localConfig, setLocalConfig] = useState(config);
-  const [hasChanges, setHasChanges] = useState(false);
+  const [localConfig, setLocalConfig] = useState<SubtitleConfig | null>(config);
   const [isSaving, setIsSaving] = useState(false);
   // Better mobile UX: toggle between settings/preview on small screens
   const [mobileTab, setMobileTab] = useState<'settings' | 'preview'>('settings');
@@ -71,44 +71,46 @@ const GlobalSubtitleSettings: React.FC<GlobalSubtitleSettingsProps> = ({
   });
   
   // Store initial config to track changes
-  const [initialConfig, setInitialConfig] = useState(config);
-  
-  useEffect(() => {
-    if (localConfig && initialConfig) {
-      // Check if any changes were made
-      const configChanged = JSON.stringify(localConfig) !== JSON.stringify(initialConfig);
-      setHasChanges(configChanged);
-    }
-  }, [localConfig, initialConfig]);
+  const [initialConfig, setInitialConfig] = useState<SubtitleConfig | null>(config);
   
   useEffect(() => {
     // Store initial config when modal opens and sync local config
     if (isOpen && config) {
       setInitialConfig({...config});
       setLocalConfig({...config});
-      setHasChanges(false);
     }
   }, [isOpen, config]);
 
-  if (!isOpen || !localConfig) return null;
+  const hasChanges = useMemo(() => {
+    if (!localConfig || !initialConfig) {
+      return false;
+    }
+    return JSON.stringify(localConfig) !== JSON.stringify(initialConfig);
+  }, [localConfig, initialConfig]);
 
-  const handleUpdateConfig = (field: string, value: any) => {
+  const handleUpdateConfig = <K extends keyof SubtitleConfig>(field: K, value: SubtitleConfig[K]) => {
+    if (!localConfig) {
+      return;
+    }
     setLocalConfig({ ...localConfig, [field]: value });
   };
   
-  const handleSave = async () => {
-    try {
-      setIsSaving(true);
-      await updateConfig(localConfig);
-      setInitialConfig({...localConfig});
-      setHasChanges(false);
-      onClose();
-    } catch (error) {
-      console.error('Failed to save subtitle configuration:', error);
-      // You might want to show an error message to the user here
-    } finally {
-      setIsSaving(false);
+  const handleSave = () => {
+    if (!localConfig) {
+      return;
     }
+    setIsSaving(true);
+    updateConfig(localConfig)
+      .then(() => {
+        setInitialConfig({ ...localConfig });
+        onClose();
+      })
+      .catch((error) => {
+        console.error('Failed to save subtitle configuration:', error);
+      })
+      .finally(() => {
+        setIsSaving(false);
+      });
   };
   
   const handleCancel = () => {
@@ -117,7 +119,6 @@ const GlobalSubtitleSettings: React.FC<GlobalSubtitleSettingsProps> = ({
         if (initialConfig) {
           setLocalConfig({...initialConfig});
         }
-        setHasChanges(false);
         onClose();
       }
     } else {
@@ -132,9 +133,58 @@ const GlobalSubtitleSettings: React.FC<GlobalSubtitleSettingsProps> = ({
     });
   };
 
+  // Memoize preview text styling so the live preview stays performant and consistent
+  const sharedPreviewStyle = useMemo<React.CSSProperties>(() => {
+    if (!localConfig) {
+      return {};
+    }
+
+    const resolvedFontSize = localConfig.fontSize && localConfig.fontSize.includes('px')
+      ? localConfig.fontSize
+      : `${localConfig.fontSize || 28}px`;
+
+    const resolvedTextDecoration = [
+      localConfig.underline ? 'underline' : '',
+      localConfig.strikeOut ? 'line-through' : ''
+    ].filter(Boolean).join(' ') || 'none';
+
+    const scaleX = (localConfig.scaleX ?? 100) / 100;
+    const scaleY = (localConfig.scaleY ?? 100) / 100;
+    const rotation = localConfig.angle ?? 0;
+    const shadowStrength = localConfig.shadow ?? 0;
+
+    return {
+      fontFamily: localConfig.fontFamily,
+      fontSize: resolvedFontSize,
+      fontWeight: weightToCss(localConfig.fontWeight),
+      color: localConfig.color,
+      backgroundColor: localConfig.backgroundColor,
+      lineHeight: localConfig.lineHeight,
+      borderRadius: localConfig.borderRadius,
+      padding: localConfig.borderStyle === 3 ? `${localConfig.outline ?? 8}px` : localConfig.padding,
+      maxWidth: localConfig.maxWidth,
+      direction: 'rtl',
+      fontStyle: localConfig.italic ? 'italic' : 'normal',
+      textDecoration: resolvedTextDecoration,
+      transform: `scaleX(${scaleX}) scaleY(${scaleY}) rotate(${rotation}deg)`,
+      letterSpacing: `${localConfig.spacing ?? 0}px`,
+      textShadow: shadowStrength
+        ? `${shadowStrength}px ${shadowStrength}px ${Math.max(1, shadowStrength / 2)}px ${localConfig.outlineColor || '#000000'}`
+        : 'none'
+    };
+  }, [localConfig]);
+
+  if (!isOpen || !localConfig) return null;
+
   return (
-    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${className}`}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+    <div
+      className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black bg-opacity-50 p-4 sm:p-6 ${className}`}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[calc(100vh-2rem)] sm:max-h-[85vh] flex flex-col overflow-hidden"
+      >
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white relative">
           <div className="flex items-center justify-between">
@@ -152,7 +202,7 @@ const GlobalSubtitleSettings: React.FC<GlobalSubtitleSettingsProps> = ({
         </div>
 
         {/* Content area should be the only scrollable region inside the modal */}
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+  <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Main content area */}
           <div className="flex-1 min-h-0 flex flex-col md:flex-row h-full">
             {/* Mobile tabs to switch between panels */}
@@ -661,23 +711,7 @@ const GlobalSubtitleSettings: React.FC<GlobalSubtitleSettingsProps> = ({
                       <div className="absolute top-4 left-0 right-0 flex justify-center">
                         <div 
                           className="text-center px-4 py-2 max-w-[80%]"
-                          style={{
-                            fontFamily: localConfig.fontFamily,
-                            fontSize: localConfig.fontSize + (localConfig.fontSize?.includes('px') ? '' : 'px'),
-                            fontWeight: weightToCss(localConfig.fontWeight),
-                            color: localConfig.color,
-                            backgroundColor: localConfig.backgroundColor,
-                            lineHeight: localConfig.lineHeight,
-                            borderRadius: localConfig.borderRadius,
-                            padding: localConfig.borderStyle === 3 ? `${(localConfig.outline ?? 8)}px` : (localConfig.padding || undefined),
-                            maxWidth: localConfig.maxWidth,
-                            direction: 'rtl',
-                            fontStyle: localConfig.italic ? 'italic' : 'normal',
-                            textDecoration: `${localConfig.underline ? 'underline' : ''} ${localConfig.strikeOut ? 'line-through' : ''}`.trim() || 'none',
-                            transform: `scaleX(${(localConfig.scaleX || 100) / 100}) scaleY(${(localConfig.scaleY || 100) / 100}) rotate(${localConfig.angle || 0}deg)`,
-                            letterSpacing: `${localConfig.spacing || 0}px`,
-                            textShadow: localConfig.shadow ? `${localConfig.shadow}px ${localConfig.shadow}px ${Math.max(1, localConfig.shadow/2)}px ${localConfig.outlineColor || '#000000'}` : 'none'
-                          }}
+                          style={sharedPreviewStyle}
                         >
                           مرحباً بك في تطبيق الترجمة
                         </div>
@@ -688,23 +722,7 @@ const GlobalSubtitleSettings: React.FC<GlobalSubtitleSettingsProps> = ({
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div 
                           className="text-center px-4 py-2 max-w-[80%]"
-                          style={{
-                            fontFamily: localConfig.fontFamily,
-                            fontSize: localConfig.fontSize + (localConfig.fontSize?.includes('px') ? '' : 'px'),
-                            fontWeight: weightToCss(localConfig.fontWeight),
-                            color: localConfig.color,
-                            backgroundColor: localConfig.backgroundColor,
-                            lineHeight: localConfig.lineHeight,
-                            borderRadius: localConfig.borderRadius,
-                            padding: localConfig.borderStyle === 3 ? `${(localConfig.outline ?? 8)}px` : (localConfig.padding || undefined),
-                            maxWidth: localConfig.maxWidth,
-                            direction: 'rtl',
-                            fontStyle: localConfig.italic ? 'italic' : 'normal',
-                            textDecoration: `${localConfig.underline ? 'underline' : ''} ${localConfig.strikeOut ? 'line-through' : ''}`.trim() || 'none',
-                            transform: `scaleX(${(localConfig.scaleX || 100) / 100}) scaleY(${(localConfig.scaleY || 100) / 100}) rotate(${localConfig.angle || 0}deg)`,
-                            letterSpacing: `${localConfig.spacing || 0}px`,
-                            textShadow: localConfig.shadow ? `${localConfig.shadow}px ${localConfig.shadow}px ${Math.max(1, localConfig.shadow/2)}px ${localConfig.outlineColor || '#000000'}` : 'none'
-                          }}
+                          style={sharedPreviewStyle}
                         >
                           مرحباً بك في تطبيق الترجمة
                         </div>
@@ -715,23 +733,7 @@ const GlobalSubtitleSettings: React.FC<GlobalSubtitleSettingsProps> = ({
                       <div className="w-full flex justify-center" style={{marginBottom: `${localConfig.margin?.bottom || 10}px`}}>
                         <div 
                           className="text-center px-4 py-2 max-w-[80%]"
-                          style={{
-                            fontFamily: localConfig.fontFamily,
-                            fontSize: localConfig.fontSize + (localConfig.fontSize?.includes('px') ? '' : 'px'),
-                            fontWeight: weightToCss(localConfig.fontWeight),
-                            color: localConfig.color,
-                            backgroundColor: localConfig.backgroundColor,
-                            lineHeight: localConfig.lineHeight,
-                            borderRadius: localConfig.borderRadius,
-                            padding: localConfig.borderStyle === 3 ? `${(localConfig.outline ?? 8)}px` : (localConfig.padding || undefined),
-                            maxWidth: localConfig.maxWidth,
-                            direction: 'rtl',
-                            fontStyle: localConfig.italic ? 'italic' : 'normal',
-                            textDecoration: `${localConfig.underline ? 'underline' : ''} ${localConfig.strikeOut ? 'line-through' : ''}`.trim() || 'none',
-                            transform: `scaleX(${(localConfig.scaleX || 100) / 100}) scaleY(${(localConfig.scaleY || 100) / 100}) rotate(${localConfig.angle || 0}deg)`,
-                            letterSpacing: `${localConfig.spacing || 0}px`,
-                            textShadow: localConfig.shadow ? `${localConfig.shadow}px ${localConfig.shadow}px ${Math.max(1, localConfig.shadow/2)}px ${localConfig.outlineColor || '#000000'}` : 'none'
-                          }}
+                          style={sharedPreviewStyle}
                         >
                           مرحباً بك في تطبيق الترجمة
                         </div>
@@ -744,22 +746,7 @@ const GlobalSubtitleSettings: React.FC<GlobalSubtitleSettingsProps> = ({
                   <h4 className="text-sm font-medium text-gray-700">نص عينة آخر</h4>
                   <div 
                     className="bg-gray-800 rounded-lg p-4 text-center"
-                    style={{
-                      fontFamily: localConfig.fontFamily,
-                      fontSize: localConfig.fontSize + (localConfig.fontSize?.includes('px') ? '' : 'px'),
-                      fontWeight: weightToCss(localConfig.fontWeight),
-                      color: localConfig.color,
-                      backgroundColor: localConfig.backgroundColor,
-                      lineHeight: localConfig.lineHeight,
-                      borderRadius: localConfig.borderRadius,
-                      padding: localConfig.borderStyle === 3 ? `${(localConfig.outline ?? 8)}px` : (localConfig.padding || undefined),
-                      maxWidth: "100%",
-                      direction: 'rtl',
-                      fontStyle: localConfig.italic ? 'italic' : 'normal',
-                      textDecoration: `${localConfig.underline ? 'underline' : ''} ${localConfig.strikeOut ? 'line-through' : ''}`.trim() || 'none',
-                      letterSpacing: `${localConfig.spacing || 0}px`,
-                      textShadow: localConfig.shadow ? `${localConfig.shadow}px ${localConfig.shadow}px ${Math.max(1, localConfig.shadow/2)}px ${localConfig.outlineColor || '#000000'}` : 'none'
-                    }}
+                    style={{ ...sharedPreviewStyle, maxWidth: '100%' }}
                   >
                     هذا مثال على ترجمة طويلة على سطرين
                     <br/>

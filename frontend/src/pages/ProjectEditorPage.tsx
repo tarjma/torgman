@@ -8,6 +8,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import IntegratedSubtitlePanel from '../components/IntegratedSubtitlePanel';
 import VideoPlayerHeader from '../components/VideoPlayerHeader';
 import GlobalSubtitleSettings from '../components/GlobalSubtitleSettings';
+import RegenerateCaptionsModal from '../components/RegenerateCaptionsModal';
 
 // Hooks
 import { useProjects } from '../hooks/useProjects';
@@ -36,6 +37,7 @@ const ProjectEditorPage = () => {
   
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
+  const [showRegenerateCaptions, setShowRegenerateCaptions] = useState(false);
   const [translationStatus, setTranslationStatus] = useState<{ status: string; message: string; progress?: number } | null>(null);
   // Define the export status type
   interface ExportStatus {
@@ -316,6 +318,37 @@ const ProjectEditorPage = () => {
     setActiveSubtitle(subtitleId);
   }, [setCurrentTime, setActiveSubtitle]);
 
+  const handleRegenerateCaptionsSuccess = useCallback(async () => {
+    if (!projectId) return;
+    
+    // Reload the project subtitles
+    const backendSubtitles = await projectService.getProjectSubtitles(projectId);
+    const frontendSubtitles = backendSubtitles.map((sub, index) => ({
+      id: `${projectId}-${index}`,
+      start_time: sub.start_time,
+      end_time: sub.end_time,
+      text: sub.text,
+      originalText: sub.text,
+      translatedText: sub.translation || '',
+      position: { x: 50, y: 80 },
+      styling: {
+        fontFamily: 'Noto Sans Arabic, Arial, sans-serif',
+        fontSize: 20,
+        color: '#ffffff',
+        backgroundColor: '#000000',
+        opacity: 1,
+        outline: true,
+        outlineColor: '#000000',
+        bold: false,
+        italic: false,
+        alignment: 'center' as const
+      }
+    }));
+    
+    loadSubtitles(frontendSubtitles);
+    alert('تم إعادة إنشاء الترجمات بنجاح!');
+  }, [projectId, loadSubtitles]);
+
   const handleExportSubtitles = useCallback(() => {
     if (subtitles.length === 0) {
       alert('لا توجد ترجمات للتصدير');
@@ -549,6 +582,7 @@ const ProjectEditorPage = () => {
           isExporting={!!(exportStatus && !['export_completed', 'export_failed'].includes(exportStatus.status))}
           onBackToHome={handleBackToHome}
           onShowGlobalSettings={() => setShowGlobalSettings(true)}
+          onRegenerateCaptions={() => setShowRegenerateCaptions(true)}
           onExport={handleExportSubtitles}
           onExportVideo={handleExportVideo}
         />
@@ -602,6 +636,14 @@ const ProjectEditorPage = () => {
       <GlobalSubtitleSettings
         isOpen={showGlobalSettings}
         onClose={() => setShowGlobalSettings(false)}
+      />
+
+      {/* Regenerate Captions Modal */}
+      <RegenerateCaptionsModal
+        isOpen={showRegenerateCaptions}
+        onClose={() => setShowRegenerateCaptions(false)}
+        projectId={projectId || ''}
+        onSuccess={handleRegenerateCaptionsSuccess}
       />
 
     </div>

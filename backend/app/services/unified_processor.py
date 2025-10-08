@@ -108,8 +108,21 @@ class UnifiedVideoProcessor:
         await self._send_status(project_id, "generating_subtitles", start_progress + 25, 
                                "Generating subtitles with speech recognition...")
         
-        # Generate subtitles
-        subtitles = self.subtitle_generator.generate_transcription(audio_path)
+        # Generate subtitles and store word-level data for post-processing
+        result = self.subtitle_generator.whisper_model.transcribe(audio_path, word_timestamps=True)
+        all_words = [word for segment in result["segments"] for word in segment.get("words", [])]
+        
+        # Store word-level data for later regeneration
+        project_dir = settings.get_project_dir(project_id)
+        words_path = project_dir / "words.json"
+        with open(words_path, 'w', encoding='utf-8') as f:
+            import json
+            json.dump(all_words, f, ensure_ascii=False, indent=2)
+        
+        # Generate captions with current settings
+        subtitles = self.subtitle_generator.generate_captions(all_words)
+        self.subtitle_generator.last_detected_language = result.get("language") or "en"
+        
         return subtitles
     
     async def _finalize_processing(self, project_id: str, subtitles: list, completion_data: Dict[str, Any]):
@@ -163,10 +176,23 @@ class UnifiedVideoProcessor:
         """Handle errors during processing"""
         logger.error(f"Error during {operation} for project {project_id}: {str(error)}")
         
+        # Provide user-friendly Arabic error messages
+        error_str = str(error)
+        if "403" in error_str or "Forbidden" in error_str:
+            user_message = "فشل تحميل الفيديو من YouTube. يرجى المحاولة مرة أخرى أو استخدام فيديو آخر. قد تحتاج إلى تحديث الأداة."
+        elif "404" in error_str or "not found" in error_str.lower():
+            user_message = "الفيديو غير موجود أو غير متاح. يرجى التحقق من الرابط."
+        elif "private" in error_str.lower() or "unavailable" in error_str.lower():
+            user_message = "الفيديو خاص أو غير متاح للمشاهدة. يرجى استخدام فيديو عام."
+        elif "age" in error_str.lower() and "restricted" in error_str.lower():
+            user_message = "الفيديو مقيد بالعمر ولا يمكن تحميله."
+        else:
+            user_message = f"فشلت المعالجة: {error_str}"
+        
         await manager.send_to_project(project_id, {
             "project_id": project_id,
             "type": "error",
-            "message": f"Processing failed: {str(error)}"
+            "message": user_message
         })
         
         # Update project status to failed
