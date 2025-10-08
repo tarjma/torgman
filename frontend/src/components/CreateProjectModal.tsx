@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { X, Upload, Youtube, FileVideo, Loader2, CheckCircle, RefreshCw, Info } from 'lucide-react';
 import { Project } from '../types';
 import { youtubeService, YouTubeVideoInfo } from '../services/youtubeService';
+import { globalWebSocketService } from '../services/globalWebSocketService';
 
 // Move constants outside component for better performance
 const YOUTUBE_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/;
@@ -52,6 +53,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   // Add state for tracking manual title input and validation errors
   const [isTitleManuallySet, setIsTitleManuallySet] = useState(false);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
+  
+  // Track real backend progress
+  const [backendProgress, setBackendProgress] = useState(0);
+  const [backendStage, setBackendStage] = useState('');
 
   const resetForm = useCallback(() => {
     setProjectType('youtube');
@@ -94,6 +99,28 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       setVideoInfo(null);
     }
   }, [youtubeUrl, projectType]);
+  
+  // Listen to WebSocket updates during modal processing
+  useEffect(() => {
+    if (!isProcessing) {
+      setBackendProgress(0);
+      setBackendStage('');
+      return;
+    }
+    
+    const handleProgress = (message: any) => {
+      if (message.type === 'status' && message.progress !== undefined) {
+        setBackendProgress(message.progress);
+        setBackendStage(message.status || '');
+      }
+    };
+    
+    globalWebSocketService.addEventListener('*', handleProgress);
+    
+    return () => {
+      globalWebSocketService.removeEventListener('*', handleProgress);
+    };
+  }, [isProcessing]);
 
   // Manual YouTube info fetching
   const handleFetchYouTubeInfo = useCallback(async () => {
@@ -281,18 +308,27 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               </div>
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">جاري معالجة المشروع...</h3>
-            <p className="text-gray-600 mb-4">يتم تحضير البيانات وبدء المعالجة</p>
+            
+            {/* Show stage-specific message */}
+            <p className="text-gray-600 mb-4">
+              {backendStage === 'downloading_video' && 'جاري تحميل الفيديو من يوتيوب...'}
+              {backendStage === 'extracting_audio' && 'جاري استخراج الصوت من الفيديو...'}
+              {backendStage === 'generating_subtitles' && 'جاري توليد الترجمات (قد يستغرق عدة دقائق)...'}
+              {!backendStage && 'يتم تحضير البيانات وبدء المعالجة'}
+            </p>
             
             <div className="max-w-xs mx-auto">
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div 
                   className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${progress}%` }}
+                  style={{ width: `${backendProgress > 0 ? backendProgress : progress}%` }}
                 />
               </div>
               <div className="flex justify-between items-center mt-2">
-                <span className="text-sm font-medium text-blue-600">{progress}% مكتمل</span>
-                {progress === 100 && (
+                <span className="text-sm font-medium text-blue-600">
+                  {backendProgress > 0 ? backendProgress : progress}% مكتمل
+                </span>
+                {(backendProgress >= 100 || progress === 100) && (
                   <div className="flex items-center gap-1 text-green-600">
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-sm">تم بنجاح!</span>
@@ -300,6 +336,13 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 )}
               </div>
             </div>
+            
+            {/* Note about closing modal */}
+            {backendProgress > 0 && backendProgress < 100 && (
+              <p className="text-xs text-gray-500 mt-3">
+                يمكنك إغلاق هذه النافذة - ستستمر المعالجة في الخلفية
+              </p>
+            )}
           </div>
         )}
 

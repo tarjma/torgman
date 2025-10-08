@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Settings, Share2, Download, Home, Maximize2, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Settings, Share2, Download, Home, Maximize2, FileText, Loader2, RefreshCw } from 'lucide-react';
 
 interface VideoPlayerHeaderProps {
   projectTitle: string;
@@ -10,6 +10,7 @@ interface VideoPlayerHeaderProps {
   isExporting: boolean;
   onBackToHome: () => void;
   onShowGlobalSettings: () => void;
+  onRegenerateCaptions?: () => void;
   onExport: () => void; // For subtitle file
   onExportVideo: () => void; // For video file
   onShare?: () => void;
@@ -25,6 +26,7 @@ const VideoPlayerHeader: React.FC<VideoPlayerHeaderProps> = ({
   isExporting,
   onBackToHome,
   onShowGlobalSettings,
+  onRegenerateCaptions,
   onExport,
   onExportVideo,
   onShare,
@@ -113,6 +115,17 @@ const VideoPlayerHeader: React.FC<VideoPlayerHeaderProps> = ({
             {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             <span className="hidden sm:inline">{isExporting ? "جاري التصدير..." : "تصدير الفيديو"}</span>
           </button>
+          
+          {onRegenerateCaptions && (
+            <button
+              onClick={onRegenerateCaptions}
+              className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition-all"
+              title="إعادة إنشاء الترجمات"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span className="hidden sm:inline">تخصيص الترجمة</span>
+            </button>
+          )}
           
           <button
             onClick={onShowGlobalSettings}
