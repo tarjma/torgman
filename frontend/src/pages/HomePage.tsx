@@ -8,7 +8,7 @@ import CreateProjectModal from '../components/CreateProjectModal';
 // Hooks
 import { useProjects } from '../hooks/useProjects';
 import { useVideoProcessor } from '../hooks/useVideoProcessor';
-import { useProjectStatusUpdates } from '../hooks/useProjectStatusUpdates';
+import { useProjectStatusUpdates, useProjectPollingFallback } from '../hooks/useProjectStatusUpdates';
 
 // Types
 import { Project } from '../types';
@@ -27,8 +27,16 @@ const HomePageContainer = () => {
     updateProjectFromWebSocket
   } = useProjects(defaultUserId);
 
+  // Wrapper to match the ProjectProcessingUpdateHandler signature
+  const handleProjectUpdate = (projectId: string, updates: any) => {
+    updateProjectFromWebSocket(projectId, updates);
+  };
+
   // Enable real-time project status updates
-  useProjectStatusUpdates(projects, updateProjectFromWebSocket);
+  useProjectStatusUpdates(projects, handleProjectUpdate);
+  
+  // Enable polling fallback for stuck projects
+  useProjectPollingFallback(projects, handleProjectUpdate);
 
   const {
     progress
@@ -50,27 +58,33 @@ const HomePageContainer = () => {
       
       if (videoFile) {
         console.log('Processing file upload...');
+        const { progress, currentStage, stageMessage, ...cleanProjectData } = projectData;
         newProject = await createProject({
-          ...projectData,
+          ...cleanProjectData,
           duration: 0
-        }, resolution || '720p', videoFile);
+        } as any, resolution || '720p', videoFile);
         
         console.log('Project created:', newProject);
         
         if (newProject) {
+          // Wait 2 seconds to show initial progress, then close
+          await new Promise(resolve => setTimeout(resolve, 2000));
           setShowCreateModal(false);
-          console.log('File upload started, staying on home page until completion');
+          console.log('File upload started, modal closing, tracking via card');
         }
       } else if (youtubeUrl) {
         console.log('Processing YouTube URL...');
+        const { progress, currentStage, stageMessage, ...cleanProjectData } = projectData;
         newProject = await createProject({
-          ...projectData,
+          ...cleanProjectData,
           duration: videoInfo?.duration || 0
-        }, resolution || '720p', undefined, videoInfo);
+        } as any, resolution || '720p', undefined, videoInfo);
 
         if (newProject) {
+          // Wait 2 seconds to show initial progress, then close
+          await new Promise(resolve => setTimeout(resolve, 2000));
           setShowCreateModal(false);
-          console.log('YouTube project created, staying on home page until completion');
+          console.log('YouTube project created, modal closing, tracking via card');
         }
       } else {
         throw new Error('Either video file or YouTube URL must be provided');

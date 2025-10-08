@@ -35,9 +35,16 @@ export default {
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',
+        'fadeIn': 'fadeIn 0.3s ease-in',
         'slide-in-right': 'slideInRight 0.5s ease-out',
         'pulse-soft': 'pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'gradient': 'gradient 15s ease infinite',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'scale(0.95)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
       },
       backdropBlur: {
         xs: '2px',

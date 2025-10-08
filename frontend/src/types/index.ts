@@ -85,7 +85,10 @@ export interface Project {
   // Renamed backend field: source_language
   source_language?: string; // new preferred
   language?: string; // legacy fallback
-  status: 'draft' | 'processing' | 'completed' | 'error';
+  status: 'draft' | 'processing' | 'completed' | 'error' | 'failed';
+  progress?: number; // 0-100, tracks processing progress
+  currentStage?: string; // Current processing stage (e.g., "downloading_video", "generating_subtitles")
+  stageMessage?: string; // User-friendly Arabic message for current stage
   createdAt: Date;
   updatedAt: Date;
   userId: string;
@@ -99,7 +102,10 @@ export interface BackendProject {
   description?: string;
   youtube_url?: string;
   duration: number;
-  status: 'draft' | 'processing' | 'completed' | 'error';
+  status: 'draft' | 'processing' | 'completed' | 'error' | 'failed';
+  progress?: number;
+  currentStage?: string;
+  stageMessage?: string;
   source_language?: string; // new
   language?: string; // legacy
   subtitle_count: number;

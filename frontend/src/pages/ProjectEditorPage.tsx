@@ -62,8 +62,13 @@ const ProjectEditorPage = () => {
     isLoading: projectsLoading
   } = useProjects(defaultUserId);
 
+  // Wrapper to match the ProjectProcessingUpdateHandler signature
+  const handleProjectUpdate = (projectId: string, updates: any) => {
+    updateProjectFromWebSocket(projectId, updates);
+  };
+
   // Set up real-time project status updates
-  useProjectStatusUpdates(projects, updateProjectFromWebSocket);
+  useProjectStatusUpdates(projects, handleProjectUpdate);
 
   // Set up real-time subtitle updates for the current project
   useProjectSubtitleUpdates(
