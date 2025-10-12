@@ -8,6 +8,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import IntegratedSubtitlePanel from '../components/IntegratedSubtitlePanel';
 import VideoPlayerHeader from '../components/VideoPlayerHeader';
 import GlobalSubtitleSettings from '../components/GlobalSubtitleSettings';
+import RegenerateCaptionsModal from '../components/RegenerateCaptionsModal';
 
 // Hooks
 import { useProjects } from '../hooks/useProjects';
@@ -36,6 +37,7 @@ const ProjectEditorPage = () => {
   
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
+  const [showRegenerateCaptions, setShowRegenerateCaptions] = useState(false);
   const [translationStatus, setTranslationStatus] = useState<{ status: string; message: string; progress?: number } | null>(null);
   // Define the export status type
   interface ExportStatus {
@@ -60,8 +62,13 @@ const ProjectEditorPage = () => {
     isLoading: projectsLoading
   } = useProjects(defaultUserId);
 
+  // Wrapper to match the ProjectProcessingUpdateHandler signature
+  const handleProjectUpdate = (projectId: string, updates: any) => {
+    updateProjectFromWebSocket(projectId, updates);
+  };
+
   // Set up real-time project status updates
-  useProjectStatusUpdates(projects, updateProjectFromWebSocket);
+  useProjectStatusUpdates(projects, handleProjectUpdate);
 
   // Set up real-time subtitle updates for the current project
   useProjectSubtitleUpdates(
@@ -211,14 +218,16 @@ const ProjectEditorPage = () => {
             url: videoUrl,
             duration: foundProject.duration,
             title: foundProject.videoTitle,
-            language: foundProject.language || 'ar'
+            language: 'ar',
+            source_language: (foundProject as any).source_language || (foundProject as any).language || 'en'
           });
         } else if (foundProject?.videoFile) {
           setVideoInfo({
             url: `/api/projects/${projectId}/video`,
             title: foundProject.videoTitle,
             duration: foundProject.duration,
-            language: foundProject.language || 'ar'
+            language: 'ar',
+            source_language: (foundProject as any).source_language || (foundProject as any).language || 'en'
           });
         } else {
           // Try to load video URL directly even if project not in list
@@ -313,6 +322,37 @@ const ProjectEditorPage = () => {
     setCurrentTime(startTime);
     setActiveSubtitle(subtitleId);
   }, [setCurrentTime, setActiveSubtitle]);
+
+  const handleRegenerateCaptionsSuccess = useCallback(async () => {
+    if (!projectId) return;
+    
+    // Reload the project subtitles
+    const backendSubtitles = await projectService.getProjectSubtitles(projectId);
+    const frontendSubtitles = backendSubtitles.map((sub, index) => ({
+      id: `${projectId}-${index}`,
+      start_time: sub.start_time,
+      end_time: sub.end_time,
+      text: sub.text,
+      originalText: sub.text,
+      translatedText: sub.translation || '',
+      position: { x: 50, y: 80 },
+      styling: {
+        fontFamily: 'Noto Sans Arabic, Arial, sans-serif',
+        fontSize: 20,
+        color: '#ffffff',
+        backgroundColor: '#000000',
+        opacity: 1,
+        outline: true,
+        outlineColor: '#000000',
+        bold: false,
+        italic: false,
+        alignment: 'center' as const
+      }
+    }));
+    
+    loadSubtitles(frontendSubtitles);
+    alert('تم إعادة إنشاء الترجمات بنجاح!');
+  }, [projectId, loadSubtitles]);
 
   const handleExportSubtitles = useCallback(() => {
     if (subtitles.length === 0) {
@@ -547,6 +587,7 @@ const ProjectEditorPage = () => {
           isExporting={!!(exportStatus && !['export_completed', 'export_failed'].includes(exportStatus.status))}
           onBackToHome={handleBackToHome}
           onShowGlobalSettings={() => setShowGlobalSettings(true)}
+          onRegenerateCaptions={() => setShowRegenerateCaptions(true)}
           onExport={handleExportSubtitles}
           onExportVideo={handleExportVideo}
         />
@@ -591,6 +632,7 @@ const ProjectEditorPage = () => {
             currentTime={currentTime}
             onTimeUpdate={handleTimeUpdate}
             onDurationChange={(duration) => console.log('Duration:', duration)}
+            sourceLangCode={project?.source_language || project?.language || (videoInfo as any).language}
           />
         </div>
       </div>
@@ -599,6 +641,14 @@ const ProjectEditorPage = () => {
       <GlobalSubtitleSettings
         isOpen={showGlobalSettings}
         onClose={() => setShowGlobalSettings(false)}
+      />
+
+      {/* Regenerate Captions Modal */}
+      <RegenerateCaptionsModal
+        isOpen={showRegenerateCaptions}
+        onClose={() => setShowRegenerateCaptions(false)}
+        projectId={projectId || ''}
+        onSuccess={handleRegenerateCaptionsSuccess}
       />
 
     </div>

@@ -30,7 +30,8 @@ class ProjectData(BaseModel):
     thumbnail_file: Optional[str] = None
     duration: float = 0.0
     status: str = "draft"
-    language: str = "ar"
+    # Renamed from 'language' to explicit 'source_language'
+    source_language: str = "en"
     subtitle_count: int = 0
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

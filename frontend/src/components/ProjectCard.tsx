@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, FileText, Trash2, Loader2 } from 'lucide-react';
 import { Project } from '../types';
 import ProjectThumbnail from './ProjectThumbnail';
+import ProcessingStages from './ProcessingStages';
 
 interface ProjectCardProps {
   project: Project;
@@ -45,6 +46,28 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
     }).format(new Date(date));
   };
 
+  const estimateRemainingTime = (project: Project): string | null => {
+    if (!project.progress || project.progress === 0 || project.progress >= 95) {
+      return null;
+    }
+    
+    // Rough estimation: 1 minute of video = 30-60 seconds of processing
+    // Transcription is ~75% of the work
+    const videoDuration = project.duration || 0;
+    const totalEstimatedSeconds = videoDuration * 0.5; // 0.5x video length
+    
+    const progressPercent = project.progress / 100;
+    const elapsedEstimate = totalEstimatedSeconds * progressPercent;
+    const remainingEstimate = totalEstimatedSeconds - elapsedEstimate;
+    
+    if (remainingEstimate < 60) {
+      return `~${Math.ceil(remainingEstimate)} ثانية متبقية`;
+    } else {
+      const minutes = Math.ceil(remainingEstimate / 60);
+      return `~${minutes} ${minutes === 1 ? 'دقيقة' : 'دقائق'} متبقية`;
+    }
+  };
+
   const getStatusColor = (status: Project['status']) => {
     switch (status) {
       case 'transcribed':
@@ -78,6 +101,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   };
 
   const isProcessing = project.status === 'processing';
+  const isError = project.status === 'error' || project.status === 'failed';
 
   return (
     <div
@@ -86,21 +110,152 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       } ${
         isProcessing 
           ? 'cursor-default opacity-90' 
-          : 'hover:shadow-md cursor-pointer'
+          : isError
+            ? 'cursor-default opacity-90'
+            : 'hover:shadow-md cursor-pointer'
       }`}
-      onClick={() => !isProcessing && onOpenProject(project)}
+      onClick={() => !isProcessing && !isError && onOpenProject(project)}
     >
       {/* Processing Overlay */}
       {isProcessing && (
-        <div className="absolute inset-0 bg-white bg-opacity-90 rounded-lg flex items-center justify-center z-10">
-          <div className="text-center">
-            <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Loader2 className="w-6 h-6 text-white animate-spin" />
+        <div className="absolute inset-0 bg-white bg-opacity-95 rounded-lg flex items-center justify-center z-10 p-6">
+          <div className="text-center w-full max-w-xs">
+            {/* Animated Icon */}
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+              <Loader2 className="w-8 h-8 text-white animate-spin" />
             </div>
-            <p className="text-sm font-medium text-gray-900 mb-1">جاري التحضير...</p>
-            <p className="text-xs text-gray-600">
-              {project.videoUrl ? 'تحميل فيديو يوتيوب' : 'معالجة الملف المرفوع'}
+            
+            {/* Processing Stages Visual */}
+            {project.currentStage && project.progress !== undefined && project.progress > 0 && (
+              <div className="mb-4">
+                <ProcessingStages 
+                  currentStage={project.currentStage} 
+                  progress={project.progress} 
+                />
+              </div>
+            )}
+            
+            {/* Progress Bar */}
+            <div className="mb-3">
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                <div 
+                  className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${project.progress || 0}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-gray-600">
+                <span>{project.progress || 0}%</span>
+                <span className="font-medium">جاري المعالجة</span>
+              </div>
+            </div>
+            
+            {/* Stage Message */}
+            <p className="text-sm font-medium text-gray-900 mb-1">
+              {project.stageMessage || 'جاري التحضير...'}
             </p>
+            
+            {/* Additional Info */}
+            <p className="text-xs text-gray-500">
+              {project.currentStage === 'generating_subtitles' 
+                ? '⏰ هذه الخطوة قد تستغرق عدة دقائق'
+                : project.videoUrl ? 'مصدر: يوتيوب' : 'مصدر: ملف محلي'
+              }
+            </p>
+            
+            {/* Time Estimate */}
+            {estimateRemainingTime(project) && (
+              <p className="text-xs text-blue-600 font-medium mt-2">
+                {estimateRemainingTime(project)}
+              </p>
+            )}
+            
+            {/* Helpful tip for slow stage */}
+            {project.currentStage === 'generating_subtitles' && (
+              <div className="mt-3 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                💡 يمكنك إغلاق هذه الصفحة والعودة لاحقاً
+              </div>
+            )}
+            
+            {/* Manual refresh button */}
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  const response = await fetch(`/api/projects/${project.id}`);
+                  if (response.ok) {
+                    // Force a re-render by reloading the page
+                    window.location.reload();
+                  }
+                } catch (error) {
+                  console.error('Failed to check status:', error);
+                }
+              }}
+              className="mt-3 px-3 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors text-gray-700"
+            >
+              🔄 تحديث الحالة
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Error Overlay */}
+      {isError && (
+        <div className="absolute inset-0 bg-white bg-opacity-95 rounded-lg flex items-center justify-center z-10 p-6">
+          <div className="text-center w-full max-w-xs">
+            {/* Error Icon */}
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            
+            {/* Error Message */}
+            <p className="text-sm font-medium text-gray-900 mb-2">
+              فشلت معالجة المشروع
+            </p>
+            <p className="text-xs text-gray-600 mb-4">
+              {project.stageMessage || 'حدث خطأ أثناء المعالجة'}
+            </p>
+            
+            {/* Action Buttons */}
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // TODO: Implement retry logic
+                  alert('سيتم إضافة خاصية إعادة المحاولة قريباً');
+                }}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+              >
+                🔄 إعادة المحاولة
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm('هل أنت متأكد من حذف هذا المشروع؟')) {
+                    onDeleteProject(project.id);
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
+              >
+                🗑️ حذف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Success Animation Overlay */}
+      {justCompleted && (
+        <div className="absolute inset-0 bg-white bg-opacity-95 rounded-lg flex items-center justify-center z-20 animate-fadeIn">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <p className="text-lg font-bold text-gray-900">اكتمل بنجاح!</p>
+            <p className="text-sm text-gray-600 mt-1">جاهز للتحرير</p>
           </div>
         </div>
       )}

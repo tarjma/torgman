@@ -81,7 +81,8 @@ class ProjectManager:
                 "duration": project_data.get("duration", 0.0),
                 "resolution": project_data.get("resolution", "720p"),
                 "status": project_data.get("status", "draft"),
-                "language": project_data.get("language", "ar"),
+                # Store explicit source language (fallback to provided 'language' for backward compatibility)
+                "source_language": project_data.get("source_language", project_data.get("language", "en")),
                 "subtitle_count": project_data.get("subtitle_count", 0),
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
@@ -229,7 +230,8 @@ class ProjectManager:
                 thumbnail_file=metadata.get("thumbnail_file", ""),
                 duration=float(metadata.get("duration", 0.0)),
                 status=metadata.get("status", "draft"),
-                language=metadata.get("language", "ar"),
+                # Backward compatibility: accept either source_language or legacy language key
+                source_language=metadata.get("source_language", metadata.get("language", "en")),
                 subtitle_count=int(metadata.get("subtitle_count", 0)),
                 created_at=datetime.fromisoformat(metadata["created_at"]) if metadata.get("created_at") else None,
                 updated_at=datetime.fromisoformat(metadata["updated_at"]) if metadata.get("updated_at") else None

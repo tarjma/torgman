@@ -78,14 +78,13 @@ export const projectService = {
     file: File,
     projectId: string, 
     title: string,
-    description?: string,
-    language: string = 'ar'
+    description?: string
   ): Promise<{
     project_id: string;
     status: string;
     message: string;
   }> {
-    console.log('uploadProjectFile called', { fileName: file.name, projectId, title, description, language });
+  console.log('uploadProjectFile called', { fileName: file.name, projectId, title, description });
     
     const formData = new FormData();
     formData.append('file', file);
@@ -94,7 +93,7 @@ export const projectService = {
     if (description) {
       formData.append('description', description);
     }
-    formData.append('language', language);
+  // No language field sent; backend will detect source language via Whisper
 
     console.log('Making API call to upload endpoint...');
     

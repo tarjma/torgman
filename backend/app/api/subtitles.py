@@ -173,3 +173,92 @@ async def translate_text_endpoint(request: TranslationRequest):
         None, translation_generator.translate_caption, request.text, request.source_language, request.target_language
     )
     return {"translation": translated}
+
+class RegenerateCaptionsRequest(BaseModel):
+    max_chars_per_line: int = 42
+    max_lines_per_caption: int = 2
+    max_caption_duration: int = 7
+    max_cps: int = 17
+
+@router.post("/{project_id}/regenerate-captions")
+async def regenerate_captions(project_id: str, request: RegenerateCaptionsRequest):
+    """Regenerate captions with custom parameters using stored word-level data"""
+    project_manager = get_project_manager()
+    project = project_manager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_dir = settings.get_project_dir(project_id)
+    words_path = project_dir / "words.json"
+    
+    if not words_path.exists():
+        raise HTTPException(
+            status_code=404, 
+            detail="لم يتم العثور على بيانات الكلمات. هذا المشروع قديم ولا يدعم هذه الميزة. يرجى إنشاء مشروع جديد للاستفادة من تخصيص الترجمات."
+        )
+    
+    # Load word-level data
+    with open(words_path, 'r', encoding='utf-8') as f:
+        words = json.load(f)
+    
+    # Import and regenerate captions with new parameters
+    from ..services.transcription_service import TranscriptionGenerator
+    generator = TranscriptionGenerator()
+    
+    new_captions = generator.regenerate_captions_with_params(
+        words,
+        request.max_chars_per_line,
+        request.max_lines_per_caption,
+        request.max_caption_duration,
+        request.max_cps
+    )
+    
+    # Preserve existing translations if they exist
+    subtitles_path = project_dir / "subtitles.json"
+    existing_translations = {}
+    if subtitles_path.exists():
+        with open(subtitles_path, 'r', encoding='utf-8') as f:
+            existing_subtitles = json.load(f)
+            # Create a map of text to translation
+            for sub in existing_subtitles:
+                if sub.get('translation'):
+                    # Store by the original text (without line breaks for matching)
+                    original_text = sub.get('text', '').replace('\n', ' ')
+                    existing_translations[original_text] = sub.get('translation')
+    
+    # Try to match translations to new captions (best effort)
+    for caption in new_captions:
+        caption_text = caption['text'].replace('\n', ' ')
+        if caption_text in existing_translations:
+            caption['translation'] = existing_translations[caption_text]
+    
+    # Save updated captions
+    captions_list = []
+    for cap in new_captions:
+        caption_obj = CaptionData(
+            start_time=cap['start_time'],
+            end_time=cap['end_time'],
+            text=cap['text'],
+            confidence=cap.get('confidence', 1.0),
+            translation=cap.get('translation')
+        )
+        captions_list.append(caption_obj.dict())
+    
+    with open(subtitles_path, 'w', encoding='utf-8') as f:
+        json.dump(captions_list, f, ensure_ascii=False, indent=2)
+    
+    # Update project metadata
+    project_manager.update_project_status(project_id, project.status, len(captions_list))
+    
+    # Regenerate ASS file with new captions
+    from ..utils.ass_utils import save_ass_file
+    from ..api.config import SubtitleConfig
+    default_config = SubtitleConfig()
+    caption_objects = [CaptionData(**cap) for cap in captions_list]
+    save_ass_file(project_id, caption_objects, default_config)
+    
+    return {
+        "message": "Captions regenerated successfully",
+        "count": len(captions_list),
+        "data": captions_list
+    }

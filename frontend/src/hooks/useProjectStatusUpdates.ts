@@ -1,10 +1,17 @@
 import { useEffect, useCallback } from 'react';
-import { globalWebSocketService, WebSocketMessage } from '../services/globalWebSocketService';
+import { globalWebSocketService } from '../services/globalWebSocketService';
+import { WebSocketMessage } from '../types/websocket';
 
 export interface ProjectProcessingUpdateHandler {
   (projectId: string, updates: {
+<<<<<<< HEAD
     status?: 'processing' | 'transcribed' | 'completed' | 'error' | 'failed';
+=======
+    status?: 'processing' | 'completed' | 'error' | 'failed';
+>>>>>>> 4973bf6d4c1541792226bf1ea354a659a6937377
     progress?: number;
+    currentStage?: string; // Current backend stage
+    stageMessage?: string; // Arabic message for stage
     duration?: number;
     subtitlesCount?: number;
   }): void;
@@ -39,14 +46,20 @@ export const useProjectStatusUpdates = (
             'extracting_audio': 'جاري استخراج الصوت من الفيديو...',
             'generating_subtitles': 'جاري توليد الترجمات باستخدام الذكاء الاصطناعي...',
             'saving_data': 'جاري حفظ البيانات...',
+<<<<<<< HEAD
             'transcribed': 'اكتمل التفريغ بنجاح!',
             'completed': 'اكتملت الترجمة بنجاح!',
+=======
+            'completed': 'اكتمل بنجاح!',
+>>>>>>> 4973bf6d4c1541792226bf1ea354a659a6937377
             'processing': 'جاري المعالجة...'
           };
           
           updateProjectCallback(project_id, {
             status: newStatus,
-            progress
+            progress: progress || 0,
+            currentStage: status,
+            stageMessage: stageMessages[status] || 'جاري المعالجة...'
           });
         }
         break;
@@ -94,4 +107,57 @@ export const useProjectStatusUpdates = (
       globalWebSocketService.removeEventListener('*', handleWebSocketMessage);
     };
   }, [handleWebSocketMessage, projects]);
+};
+
+/**
+ * Polling fallback hook for projects that might have missed WebSocket updates
+ * Checks project status every 10 seconds for processing projects
+ */
+export const useProjectPollingFallback = (
+  projects: any[],
+  updateProjectCallback: ProjectProcessingUpdateHandler
+) => {
+  useEffect(() => {
+    const processingProjects = projects.filter(p => p.status === 'processing');
+    
+    if (processingProjects.length === 0) {
+      return; // No processing projects, no need to poll
+    }
+    
+    console.log(`Starting polling fallback for ${processingProjects.length} processing projects`);
+    
+    const checkProjectStatus = async () => {
+      for (const project of processingProjects) {
+        try {
+          // Fetch latest project data from backend
+          const response = await fetch(`/api/projects/${project.id}`);
+          if (response.ok) {
+            const updatedProject = await response.json();
+            
+            // If status changed, update it
+            if (updatedProject.status !== project.status) {
+              console.log(`Polling detected status change for ${project.id}: ${project.status} -> ${updatedProject.status}`);
+              updateProjectCallback(project.id, {
+                status: updatedProject.status,
+                subtitlesCount: updatedProject.subtitle_count,
+                progress: updatedProject.status === 'completed' ? 100 : project.progress
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to poll status for project ${project.id}:`, error);
+        }
+      }
+    };
+    
+    // Poll every 10 seconds
+    const interval = setInterval(checkProjectStatus, 10000);
+    
+    // Also check immediately
+    checkProjectStatus();
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [projects, updateProjectCallback]);
 };

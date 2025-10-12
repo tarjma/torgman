@@ -160,7 +160,8 @@ async def process_youtube_video(request: YouTubeProcessRequest):
         "duration": video_info.get("duration", 0),
         "resolution": request.resolution,
         "status": "processing",
-        "language": "ar",  # Default language
+    # Placeholder; will be replaced after Whisper transcription detection
+    "source_language": "en",
         "uploader": video_info.get("uploader", "")
     }
     

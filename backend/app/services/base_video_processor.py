@@ -53,14 +53,23 @@ class BaseVideoProcessor(ABC):
             raise Exception(f"Audio extraction failed: {e}")
     
     def _save_project_metadata(self, project_dir: Path, project_id: str, **kwargs) -> None:
-        """Save project metadata to a JSON file"""
+        """Save project metadata to a JSON file preserving existing detected source_language if present."""
+        metadata_path = project_dir / "metadata.json"
+        existing_source_lang = None
+        if metadata_path.exists():
+            try:
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    prior = json.load(f)
+                    existing_source_lang = prior.get("source_language") or prior.get("language")
+            except Exception:
+                existing_source_lang = None
         metadata = {
             "project_id": project_id,
             "created_at": datetime.now().isoformat(),
-            **kwargs  # Allow subclasses to add specific metadata
+            **kwargs
         }
-        
-        metadata_path = project_dir / "metadata.json"
+        if existing_source_lang and "source_language" not in metadata:
+            metadata["source_language"] = existing_source_lang
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2)
         logger.info(f"Project metadata saved: {metadata_path}")
