@@ -16,6 +16,21 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   onOpenProject,
   onDeleteProject
 }) => {
+  // Track recent completion for success animation
+  const [justCompleted, setJustCompleted] = useState(false);
+  const [previousStatus, setPreviousStatus] = useState(project.status);
+  
+  // Watch for completion - show animation when transitioning from 'processing' to 'transcribed' or 'completed'
+  useEffect(() => {
+    if (previousStatus === 'processing' && (project.status === 'transcribed' || project.status === 'completed')) {
+      setJustCompleted(true);
+      // Show success animation for 2 seconds
+      const timer = setTimeout(() => setJustCompleted(false), 2000);
+      return () => clearTimeout(timer);
+    }
+    setPreviousStatus(project.status);
+  }, [project.status, previousStatus]);
+  
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
@@ -32,6 +47,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 
   const getStatusColor = (status: Project['status']) => {
     switch (status) {
+      case 'transcribed':
+        return 'bg-yellow-100 text-yellow-800';
       case 'completed':
         return 'bg-green-100 text-green-800';
       case 'processing':
@@ -45,8 +62,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 
   const getStatusText = (status: Project['status']) => {
     switch (status) {
+      case 'transcribed':
+        return 'تفريغ مكتمل';
       case 'completed':
-        return 'مكتمل';
+        return 'ترجمة مكتملة';
       case 'processing':
         return 'جاري المعالجة';
       case 'error':
@@ -122,6 +141,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
               </div>
             </div>
             
+            <div className="text-xs text-gray-400">
+              آخر تعديل: {formatDate(project.updatedAt)}
+            </div>
+            
             <div className="flex items-center justify-between">
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(project.status)}`}>
                 {getStatusText(project.status)}
@@ -129,10 +152,15 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDeleteProject(project.id);
+                  if (isProcessing) {
+                    if (window.confirm('هذا المشروع قيد المعالجة. هل تريد حذفه؟')) {
+                      onDeleteProject(project.id);
+                    }
+                  } else {
+                    onDeleteProject(project.id);
+                  }
                 }}
                 className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                disabled={isProcessing}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -184,10 +212,15 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDeleteProject(project.id);
+                  if (isProcessing) {
+                    if (window.confirm('هذا المشروع قيد المعالجة. هل تريد حذفه؟')) {
+                      onDeleteProject(project.id);
+                    }
+                  } else {
+                    onDeleteProject(project.id);
+                  }
                 }}
                 className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                disabled={isProcessing}
               >
                 <Trash2 className="w-4 h-4" />
               </button>

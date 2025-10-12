@@ -3,7 +3,7 @@ import { globalWebSocketService, WebSocketMessage } from '../services/globalWebS
 
 export interface ProjectProcessingUpdateHandler {
   (projectId: string, updates: {
-    status?: 'processing' | 'completed' | 'error';
+    status?: 'processing' | 'transcribed' | 'completed' | 'error' | 'failed';
     progress?: number;
     duration?: number;
     subtitlesCount?: number;
@@ -29,8 +29,21 @@ export const useProjectStatusUpdates = (
     switch (type) {
       case 'status':
         if (status) {
-          const newStatus = status === 'completed' ? 'completed' : 'processing';
-          console.log(`Updating project ${project_id} status to: ${newStatus}`);
+          const newStatus = status === 'transcribed' ? 'transcribed' : status === 'completed' ? 'completed' : 'processing';
+          console.log(`Updating project ${project_id} status to: ${newStatus}, progress: ${progress}, stage: ${status}`);
+          
+          // Map backend status to user-friendly Arabic messages
+          const stageMessages: Record<string, string> = {
+            'downloading_video': 'جاري تحميل الفيديو...',
+            'downloading_thumbnail': 'جاري تحميل الصورة المصغرة...',
+            'extracting_audio': 'جاري استخراج الصوت من الفيديو...',
+            'generating_subtitles': 'جاري توليد الترجمات باستخدام الذكاء الاصطناعي...',
+            'saving_data': 'جاري حفظ البيانات...',
+            'transcribed': 'اكتمل التفريغ بنجاح!',
+            'completed': 'اكتملت الترجمة بنجاح!',
+            'processing': 'جاري المعالجة...'
+          };
+          
           updateProjectCallback(project_id, {
             status: newStatus,
             progress
@@ -39,11 +52,11 @@ export const useProjectStatusUpdates = (
         break;
       
       case 'completion':
-        // Project is fully completed
+        // Project transcription is completed (not yet translated)
         const completionData = message.data || {};
-        console.log(`Project ${project_id} completed with data:`, completionData);
+        console.log(`Project ${project_id} transcription completed with data:`, completionData);
         updateProjectCallback(project_id, {
-          status: 'completed',
+          status: 'transcribed',
           subtitlesCount: completionData.subtitle_count || 0
         });
         break;

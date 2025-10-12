@@ -165,7 +165,7 @@ const ProjectEditorPage = () => {
           }
         }
 
-        if (foundProject && foundProject.status !== 'completed') {
+        if (foundProject && foundProject.status !== 'transcribed' && foundProject.status !== 'completed') {
           alert(`المشروع لا يزال قيد المعالجة. الحالة: ${foundProject.status}`);
           navigate('/');
           return;

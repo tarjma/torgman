@@ -41,8 +41,35 @@ class TranscriptionGenerator:
         max_caption_duration: int = 7,
         max_cps: int = 21,
     ):
-        logger.info(f"Loading Whisper model: {whisper_model_name}")
-        self.whisper_model = whisper.load_model(whisper_model_name)
+        import torch
+        
+        # Check if GPU is available and usable
+        device = "cpu"  # Default to CPU
+        try:
+            if torch.cuda.is_available():
+                # Try to allocate a small tensor to verify GPU is usable
+                test_tensor = torch.zeros(1).cuda()
+                del test_tensor
+                torch.cuda.empty_cache()
+                device = "cuda"
+                logger.info("GPU is available and will be used for Whisper model")
+            else:
+                logger.info("GPU not available, using CPU for Whisper model")
+        except Exception as e:
+            logger.warning(f"GPU error during initialization: {e}. Falling back to CPU.")
+            device = "cpu"
+        
+        logger.info(f"Loading Whisper model: {whisper_model_name} on device: {device}")
+        try:
+            self.whisper_model = whisper.load_model(whisper_model_name, device=device)
+        except Exception as e:
+            logger.error(f"Failed to load Whisper model on {device}: {e}")
+            if device == "cuda":
+                logger.info("Retrying with CPU...")
+                device = "cpu"
+                self.whisper_model = whisper.load_model(whisper_model_name, device=device)
+            else:
+                raise
         self.max_chars_per_line = max_chars_per_line
         self.max_lines_per_caption = max_lines_per_caption
         self.max_caption_duration = max_caption_duration

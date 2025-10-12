@@ -24,7 +24,10 @@ class ProjectData(BaseModel):
     id: str
     title: str
     description: Optional[str] = None
+    video_title: Optional[str] = None
     youtube_url: Optional[str] = None
+    video_file: Optional[str] = None
+    thumbnail_file: Optional[str] = None
     duration: float = 0.0
     status: str = "draft"
     language: str = "ar"

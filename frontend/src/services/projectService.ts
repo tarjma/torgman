@@ -8,7 +8,7 @@ export interface ProjectData {
   description?: string;
   youtube_url?: string;
   duration: number;
-  status: 'draft' | 'processing' | 'completed' | 'error';
+  status: 'draft' | 'processing' | 'transcribed' | 'completed' | 'error';
   language: string;
   subtitle_count: number;
   created_at?: string;

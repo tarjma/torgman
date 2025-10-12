@@ -85,7 +85,7 @@ const HomePageContainer = () => {
 
   const handleOpenProject = (project: Project) => {
     console.log('Opening project:', project);
-    if (project.status === 'completed') {
+    if (project.status === 'transcribed' || project.status === 'completed') {
       // Navigate to project editor page
       navigate(`/${project.id}`);
     } else {

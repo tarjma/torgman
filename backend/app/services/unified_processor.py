@@ -129,8 +129,15 @@ class UnifiedVideoProcessor:
         except Exception as e:
             logger.error(f"Failed to generate or save ASS subtitles for project {project_id}: {e}")
         db = get_project_manager()
-        db.update_project_status(project_id, "completed", len(subtitles))
-        await self._send_status(project_id, "completed", 100, "Processing completed successfully!")
+        # Persist detected source language once (after metadata writes by processors)
+        detected_lang = getattr(self.subtitle_generator, 'last_detected_language', None)
+        if detected_lang:
+            try:
+                db.update_project_metadata(project_id, source_language=detected_lang)
+            except Exception as e:
+                logger.error(f"Failed to persist detected language for project {project_id}: {e}")
+        db.update_project_status(project_id, "transcribed", len(subtitles))
+        await self._send_status(project_id, "transcribed", 100, "Transcription completed successfully!")
         await manager.send_to_project(project_id, {
             "project_id": project_id,
             "type": "subtitles",
@@ -141,7 +148,7 @@ class UnifiedVideoProcessor:
             "type": "completion",
             "data": completion_data
         })
-        logger.info(f"Processing completed for project {project_id}")
+        logger.info(f"Transcription completed for project {project_id}")
     
     async def _send_status(self, project_id: str, status: str, progress: int, message: str):
         """Send status update via WebSocket"""

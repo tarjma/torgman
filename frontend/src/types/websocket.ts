@@ -18,6 +18,7 @@ export type WebSocketStatus =
   | 'processing_audio'
   | 'generating_subtitles'
   | 'saving_data'
+  | 'transcribed'
   | 'completed'
   | 'translating'
   | 'export_started'

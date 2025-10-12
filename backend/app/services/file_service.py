@@ -59,11 +59,27 @@ class VideoFileProcessor(BaseVideoProcessor):
         
     def _save_project_metadata(self, project_dir: Path, project_id: str, file_path: str) -> None:
         """Save file-specific project metadata"""
-        # Extract basic video info so UI can display a proper title instead of 'Untitled'
+        # Extract basic video info
         info = self.get_video_info(str(file_path))
+        
+        # Check if project already has a title (from upload form)
+        from ..services.project_manager import get_project_manager
+        project_manager = get_project_manager()
+        existing_project = project_manager.get_project(project_id)
+        
+        # Use existing title if available, otherwise fall back to filename
+        # ProjectData is a Pydantic model, so access attributes directly
+        if existing_project and existing_project.title:
+            project_title = existing_project.title
+            project_video_title = existing_project.title
+        else:
+            project_title = info.get("title")
+            project_video_title = info.get("title")
+        
         # Attempt to create a thumbnail for the uploaded file
         thumbnail_name = self.generate_thumbnail(project_dir, project_id, str(file_path))
-        # Persist minimal set of fields similar to YouTube processor output for consistency
+        
+        # Persist metadata without overwriting user-provided title
         super()._save_project_metadata(
             project_dir,
             project_id,
@@ -71,8 +87,8 @@ class VideoFileProcessor(BaseVideoProcessor):
             audio_file=f"{project_id}_audio.wav",
             video_file=Path(file_path).name,
             thumbnail_file=thumbnail_name if thumbnail_name else None,
-            title=info.get("title"),            # Used by frontend as main display title
-            video_title=info.get("title"),      # Keep parallel naming with youtube flow
+            title=project_title,                # Preserve user-provided title
+            video_title=project_video_title,    # Preserve user-provided title
             duration=int(info.get("duration") or 0),
             format=info.get("format"),
             width=info.get("width"),
@@ -88,8 +104,7 @@ class VideoFileProcessor(BaseVideoProcessor):
             (
                 ffmpeg
                 .input(video_path, ss=1)
-                .filter('scale', 'iw', 'ih')  # Keep original size
-                .output(str(output_path), vframes=1, format='webp', vf='thumbnail')
+                .output(str(output_path), vframes=1, format='webp')
                 .overwrite_output()
                 .run(capture_stdout=True, capture_stderr=True)
             )
