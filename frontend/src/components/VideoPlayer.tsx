@@ -177,11 +177,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const getDisplayedText = useCallback(() => {
     if (!currentSubtitle) return '';
     if (showTranslated) {
-      // Prefer translated fields
-      return currentSubtitle.translatedText || currentSubtitle.translation || currentSubtitle.text || currentSubtitle.originalText || '';
+      // Show translated text only if it exists, otherwise show nothing
+      return currentSubtitle.translatedText || currentSubtitle.translation || '';
     }
     // Source/original
-    return currentSubtitle.originalText || currentSubtitle.text || currentSubtitle.translatedText || currentSubtitle.translation || '';
+    return currentSubtitle.originalText || currentSubtitle.text || '';
   }, [currentSubtitle, showTranslated]);
 
   const toggleFullscreen = useCallback(() => {

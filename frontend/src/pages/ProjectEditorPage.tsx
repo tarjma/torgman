@@ -346,7 +346,9 @@ const ProjectEditorPage = () => {
         } else if (message.status === 'retranscribe_completed') {
           setIsRetranscribing(false);
           alert(message.message || 'تم إعادة توليد الترجمات بنجاح!');
-          // Subtitles will be updated via the subtitle update handler
+          
+          // Reload the page to fetch updated project metadata (including source_language)
+          window.location.reload();
         } else if (message.status === 'retranscribe_failed') {
           setIsRetranscribing(false);
           alert(message.message || 'فشلت عملية إعادة التوليد');
