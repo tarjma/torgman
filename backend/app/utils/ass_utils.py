@@ -271,7 +271,15 @@ def create_ass_content(subtitles: List[CaptionData], style_config: SubtitleConfi
     # Calculate margins in pixels (no scaling; fixed PlayRes will scale appropriately)
     margin_left = int(round(style_config.margin.left))
     margin_right = int(round(style_config.margin.right))
-    margin_vertical = int(round(style_config.margin.vertical))
+    
+    # For vertical margin, use bottom for bottom-aligned subtitles (1,2,3), top for top-aligned (7,8,9)
+    # Fall back to vertical for backward compatibility or center-aligned (4,5,6)
+    if alignment in [1, 2, 3]:  # Bottom-aligned
+        margin_vertical = int(round(style_config.margin.bottom if hasattr(style_config.margin, 'bottom') else style_config.margin.vertical))
+    elif alignment in [7, 8, 9]:  # Top-aligned
+        margin_vertical = int(round(style_config.margin.top if hasattr(style_config.margin, 'top') else style_config.margin.vertical))
+    else:  # Center or fallback
+        margin_vertical = int(round(style_config.margin.vertical))
     
     # V4+ Style line format (complete ASS specification)
     style_header = "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding"
