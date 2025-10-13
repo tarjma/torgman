@@ -38,12 +38,32 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('ar-SA', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    }).format(new Date(date));
+  const formatRelativeTime = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - new Date(date).getTime();
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffWeeks = Math.floor(diffDays / 7);
+    const diffMonths = Math.floor(diffDays / 30);
+    const diffYears = Math.floor(diffDays / 365);
+
+    if (diffSeconds < 60) {
+      return 'الآن';
+    } else if (diffMinutes < 60) {
+      return `منذ ${diffMinutes} ${diffMinutes === 1 ? 'دقيقة' : diffMinutes === 2 ? 'دقيقتين' : 'دقائق'}`;
+    } else if (diffHours < 24) {
+      return `منذ ${diffHours} ${diffHours === 1 ? 'ساعة' : diffHours === 2 ? 'ساعتين' : 'ساعات'}`;
+    } else if (diffDays < 7) {
+      return `منذ ${diffDays} ${diffDays === 1 ? 'يوم' : diffDays === 2 ? 'يومين' : 'أيام'}`;
+    } else if (diffWeeks < 4) {
+      return `منذ ${diffWeeks} ${diffWeeks === 1 ? 'أسبوع' : diffWeeks === 2 ? 'أسبوعين' : 'أسابيع'}`;
+    } else if (diffMonths < 12) {
+      return `منذ ${diffMonths} ${diffMonths === 1 ? 'شهر' : diffMonths === 2 ? 'شهرين' : 'أشهر'}`;
+    } else {
+      return `منذ ${diffYears} ${diffYears === 1 ? 'سنة' : diffYears === 2 ? 'سنتين' : 'سنوات'}`;
+    }
   };
 
   const estimateRemainingTime = (project: Project): string | null => {
@@ -297,7 +317,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             </div>
             
             <div className="text-xs text-gray-400">
-              آخر تعديل: {formatDate(project.updatedAt)}
+              {formatRelativeTime(project.updatedAt)}
             </div>
             
             <div className="flex items-center justify-between">
@@ -362,7 +382,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                   <Clock className="w-4 h-4" />
                   <span>{formatTime(project.duration)}</span>
                 </div>
-                <span>{formatDate(project.updatedAt)}</span>
+                <span className="text-xs text-gray-400">{formatRelativeTime(project.updatedAt)}</span>
               </div>
               <button
                 onClick={(e) => {

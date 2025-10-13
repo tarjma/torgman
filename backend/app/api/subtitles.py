@@ -99,8 +99,15 @@ async def update_project_subtitles(project_id: str, subtitles_data: List[Dict]):
     with open(subtitles_path, 'w', encoding='utf-8') as f:
         json.dump(subtitles_list, f, ensure_ascii=False, indent=2)
     
-    # Update subtitle count in project metadata
-    project_manager.update_project_status(project_id, "completed", len(subtitles_list))
+    # Check if all subtitles have translations
+    all_translated = all(
+        sub.get('translation') and sub.get('translation').strip() 
+        for sub in subtitles_list
+    )
+    
+    # Update status: "completed" if all translated, otherwise "transcribed"
+    new_status = "completed" if all_translated else "transcribed"
+    project_manager.update_project_status(project_id, new_status, len(subtitles_list))
     
     return {
         "message": "Subtitles updated successfully", 
@@ -137,6 +144,10 @@ async def translate_project_subtitles(project_id: str, request: ProjectTranslati
         subtitles_path = project_dir / "subtitles.json"
         with open(subtitles_path, 'w', encoding='utf-8') as f:
             json.dump([s.model_dump() for s in translated], f, ensure_ascii=False, indent=2)
+        
+        # Update project status to "completed" since all subtitles are now translated
+        project_manager.update_project_status(project_id, "completed", len(translated))
+        
         await websocket_manager.send_to_project(project_id, {
             "project_id": project_id,
             "type": "subtitles",

@@ -4,11 +4,7 @@ import { WebSocketMessage } from '../types/websocket';
 
 export interface ProjectProcessingUpdateHandler {
   (projectId: string, updates: {
-<<<<<<< HEAD
     status?: 'processing' | 'transcribed' | 'completed' | 'error' | 'failed';
-=======
-    status?: 'processing' | 'completed' | 'error' | 'failed';
->>>>>>> 4973bf6d4c1541792226bf1ea354a659a6937377
     progress?: number;
     currentStage?: string; // Current backend stage
     stageMessage?: string; // Arabic message for stage
@@ -46,12 +42,8 @@ export const useProjectStatusUpdates = (
             'extracting_audio': 'جاري استخراج الصوت من الفيديو...',
             'generating_subtitles': 'جاري توليد الترجمات باستخدام الذكاء الاصطناعي...',
             'saving_data': 'جاري حفظ البيانات...',
-<<<<<<< HEAD
             'transcribed': 'اكتمل التفريغ بنجاح!',
             'completed': 'اكتملت الترجمة بنجاح!',
-=======
-            'completed': 'اكتمل بنجاح!',
->>>>>>> 4973bf6d4c1541792226bf1ea354a659a6937377
             'processing': 'جاري المعالجة...'
           };
           
