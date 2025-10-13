@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Settings, Share2, Download, Home, Maximize2, FileText, Loader2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Settings, Share2, Download, Home, Maximize2, FileText, Loader2, RefreshCw, Languages } from 'lucide-react';
 
 interface VideoPlayerHeaderProps {
   projectTitle: string;
@@ -11,6 +11,7 @@ interface VideoPlayerHeaderProps {
   onBackToHome: () => void;
   onShowGlobalSettings: () => void;
   onRegenerateCaptions?: () => void;
+  onRetranscribe?: () => void; // New handler for retranscription
   onExport: () => void; // For subtitle file
   onExportVideo: () => void; // For video file
   onShare?: () => void;
@@ -27,6 +28,7 @@ const VideoPlayerHeader: React.FC<VideoPlayerHeaderProps> = ({
   onBackToHome,
   onShowGlobalSettings,
   onRegenerateCaptions,
+  onRetranscribe,
   onExport,
   onExportVideo,
   onShare,
@@ -124,6 +126,17 @@ const VideoPlayerHeader: React.FC<VideoPlayerHeaderProps> = ({
             >
               <RefreshCw className="w-4 h-4" />
               <span className="hidden sm:inline">تخصيص الترجمة</span>
+            </button>
+          )}
+          
+          {onRetranscribe && (
+            <button
+              onClick={onRetranscribe}
+              className="flex items-center gap-2 px-3 py-2 bg-orange-600 text-white hover:bg-orange-700 rounded-lg transition-all"
+              title="إعادة التوليد بلغة مختلفة"
+            >
+              <Languages className="w-4 h-4" />
+              <span className="hidden sm:inline">إعادة التوليد</span>
             </button>
           )}
           

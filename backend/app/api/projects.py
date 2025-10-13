@@ -74,8 +74,17 @@ async def upload_project_file(
     project_id: str = Form(...),
     title: str = Form(...),
     description: str = Form(None),
+    language: str = Form(None),
 ):
-    """Create a new project and upload video file"""
+    """Create a new project and upload video file
+    
+    Args:
+        file: Video file to upload
+        project_id: Project identifier
+        title: Project title
+        description: Optional project description
+        language: Optional language code for transcription (e.g., 'en', 'ar', 'es')
+    """
     # Validate file type
     if not file.content_type or not file.content_type.startswith('video/'):
         raise HTTPException(status_code=400, detail="File must be a video")
@@ -110,8 +119,8 @@ async def upload_project_file(
         "video_title": title,
         "duration": duration,
         "status": "processing",
-        # Source language unknown at upload time; will be updated after Whisper transcription
-        "source_language": "en",
+        # Source language will be detected or set based on the language parameter
+        "source_language": language or "en",
         "video_file": f"{project_id}_video{file_extension}"
     }
     
@@ -122,11 +131,12 @@ async def upload_project_file(
             file_path.unlink()
         raise HTTPException(status_code=500, detail="Failed to create project")
 
-    # Start background processing
+    # Start background processing with language parameter
     from ..tasks.video_processing import process_video_file_task
     asyncio.create_task(process_video_file_task(
         str(file_path), 
-        project_id, 
+        project_id,
+        language
     ))
     
     return {
@@ -218,3 +228,39 @@ async def get_project_video(project_id: str):
         )
     
     raise HTTPException(status_code=404, detail="Video file not found")
+
+@router.post("/{project_id}/retranscribe")
+async def retranscribe_project(project_id: str, language: str = None):
+    """Retranscribe an existing project with a specified language
+    
+    Args:
+        project_id: Project identifier
+        language: Optional language code for transcription (e.g., 'en', 'ar', 'es'). 
+                 If None or 'auto', Whisper will auto-detect the language.
+    
+    Returns:
+        Status message indicating the retranscription has started
+    """
+    project_manager = get_project_manager()
+    
+    # Check if project exists
+    project = project_manager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check if audio file exists
+    project_dir = settings.get_project_dir(project_id)
+    audio_path = project_dir / f"{project_id}_audio.wav"
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found for this project")
+    
+    # Start background retranscription task
+    from ..tasks.video_processing import retranscribe_project_task
+    asyncio.create_task(retranscribe_project_task(project_id, language))
+    
+    return {
+        "project_id": project_id,
+        "status": "retranscribing",
+        "message": "Retranscription started",
+        "language": language or "auto-detect"
+    }

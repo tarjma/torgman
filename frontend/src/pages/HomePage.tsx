@@ -47,9 +47,11 @@ const HomePageContainer = () => {
     videoFile?: File, 
     youtubeUrl?: string,
     resolution?: string,
-    videoInfo?: any
+    videoInfo?: any,
+    language?: string,
+    audioLanguage?: string
   ) => {
-    console.log('handleCreateProject called', { projectData, videoFile, youtubeUrl, resolution });
+    console.log('handleCreateProject called', { projectData, videoFile, youtubeUrl, resolution, language, audioLanguage });
     
     setIsCreatingProject(true);
     
@@ -62,7 +64,7 @@ const HomePageContainer = () => {
         newProject = await createProject({
           ...cleanProjectData,
           duration: 0
-        } as any, resolution || '720p', videoFile);
+        } as any, resolution || '720p', videoFile, undefined, language);
         
         console.log('Project created:', newProject);
         
@@ -78,7 +80,7 @@ const HomePageContainer = () => {
         newProject = await createProject({
           ...cleanProjectData,
           duration: videoInfo?.duration || 0
-        } as any, resolution || '720p', undefined, videoInfo);
+        } as any, resolution || '720p', undefined, videoInfo, language, audioLanguage);
 
         if (newProject) {
           // Wait 2 seconds to show initial progress, then close

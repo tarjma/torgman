@@ -40,11 +40,35 @@ class YouTubeVideoProcessor(BaseVideoProcessor):
         ydl_opts.update(self._cookiefile_opt())
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+        
+        # Extract available audio languages and detect the original language
+        if info and info.get('formats'):
+            audio_languages = set()
+            for fmt in info['formats']:
+                # Check if this is an audio format
+                if fmt.get('acodec') != 'none':
+                    lang = fmt.get('language') or fmt.get('lang')
+                    if lang:
+                        audio_languages.add(lang)
+            
+            info['available_audio_languages'] = sorted(list(audio_languages))
+            # Try to detect the original/default language from video metadata
+            # YouTube typically provides 'language' field for the video's original language
+            info['original_audio_language'] = info.get('language') or (info['available_audio_languages'][0] if info['available_audio_languages'] else None)
+            logger.info(f"Available audio languages: {info['available_audio_languages']}, Original: {info.get('original_audio_language')}")
+        
         return info or {}
     
-    def download_video(self, url: str, project_id: str, resolution: str = "720p", video_info: Dict[str, Any] | None = None) -> str:
-        """Download full YouTube video with specified resolution.
+    def download_video(self, url: str, project_id: str, resolution: str = "720p", video_info: Dict[str, Any] | None = None, audio_language: str | None = None) -> str:
+        """Download full YouTube video with specified resolution and audio language.
         If video_info provided, derive best safe format chain from actual heights to avoid unavailable format errors.
+        
+        Args:
+            url: YouTube video URL
+            project_id: Project identifier
+            resolution: Video resolution (e.g., '720p', '1080p', 'best')
+            video_info: Optional pre-fetched video info dict
+            audio_language: Optional audio language code (e.g., 'en', 'ar', 'es'). If None, uses default audio.
         """
         
         # Get project-specific directory
@@ -52,7 +76,7 @@ class YouTubeVideoProcessor(BaseVideoProcessor):
         output_path = project_dir / f"{project_id}_video.%(ext)s"
         
         # STRICT MODE: Only attempt exactly the requested resolution (or best/worst special cases)
-        format_selector = self._build_video_format_selector(resolution)
+        format_selector = self._build_video_format_selector(resolution, audio_language)
         # If formats are missing, attempt to re-extract a fresh info dict with formats
         if not video_info or not video_info.get('formats'):
             probe_opts = {
@@ -110,6 +134,19 @@ class YouTubeVideoProcessor(BaseVideoProcessor):
                 f for f in video_height_formats
                 if f.get('acodec') != 'none' and f.get('protocol') != 'm3u8'
             ]
+            
+            # Filter progressive candidates by audio language if specified
+            if audio_language and progressive_candidates:
+                lang_filtered = [
+                    f for f in progressive_candidates
+                    if f.get('language') == audio_language or f.get('lang') == audio_language
+                ]
+                if lang_filtered:
+                    progressive_candidates = lang_filtered
+                    logger.info(f"Filtered progressive formats to audio language: {audio_language}")
+                else:
+                    logger.warning(f"No progressive formats found with audio language {audio_language}, using all available")
+            
             if progressive_candidates:
                 # Pick largest progressive by bytes then tbr
                 prog = sorted(progressive_candidates, key=lambda f: (_bytes(f), f.get('tbr') or 0), reverse=True)[0]
@@ -126,6 +163,19 @@ class YouTubeVideoProcessor(BaseVideoProcessor):
                     f for f in raw_formats
                     if f.get('acodec') != 'none' and f.get('vcodec') == 'none' and f.get('protocol') != 'm3u8'
                 ]
+                
+                # Filter audio formats by language if specified
+                if audio_language and audio_formats:
+                    lang_filtered_audio = [
+                        f for f in audio_formats
+                        if f.get('language') == audio_language or f.get('lang') == audio_language
+                    ]
+                    if lang_filtered_audio:
+                        audio_formats = lang_filtered_audio
+                        logger.info(f"Filtered audio-only formats to language: {audio_language}")
+                    else:
+                        logger.warning(f"No audio formats found with language {audio_language}, using all available")
+                
                 if not audio_formats:
                     raise Exception("No audio-only formats available to merge")
                 # Prefer largest audio by bytes then abr
@@ -248,18 +298,33 @@ class YouTubeVideoProcessor(BaseVideoProcessor):
         # Default to 720p if resolution not recognized
         return format_map.get(resolution, format_map["720p"])
 
-    def _build_video_format_selector(self, resolution: str) -> str:
-        """Strict selector before video_info (limited context)."""
+    def _build_video_format_selector(self, resolution: str, audio_language: str | None = None) -> str:
+        """Strict selector before video_info (limited context).
+        
+        Args:
+            resolution: Video resolution (e.g., '720p', '1080p', 'best')
+            audio_language: Optional audio language code (e.g., 'en', 'ar', 'es')
+        
+        Returns:
+            Format selector string for yt-dlp
+        """
+        # Build audio selector with optional language filter
+        if audio_language:
+            audio_selector = f"bestaudio[language={audio_language}]/bestaudio"
+            logger.info(f"Audio language specified: {audio_language}, using audio selector: {audio_selector}")
+        else:
+            audio_selector = "bestaudio"
+        
         if resolution == "worst":
-            return "worst"
+            return f"worst+{audio_selector}/worst"
         if resolution == "best":
-            return "bestvideo+bestaudio/bestvideo"
+            return f"bestvideo+{audio_selector}/bestvideo"
         num = ''.join(ch for ch in resolution if ch.isdigit())
         if not num.isdigit():
             # Default strict height
-            return "bestvideo[height=720]+bestaudio/bestvideo[height=720]"
+            return f"bestvideo[height=720]+{audio_selector}/bestvideo[height=720]"
         h = int(num)
-        return f"bestvideo[height={h}]+bestaudio/bestvideo[height={h}]"
+        return f"bestvideo[height={h}]+{audio_selector}/bestvideo[height={h}]"
     
     def _save_project_metadata(self, project_dir: Path, project_id: str, url: str, resolution: str, video_file: str = "", thumbnail_file: str = "", video_info: Dict[str, Any] = None) -> None:
         """Save YouTube-specific project metadata"""

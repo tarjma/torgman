@@ -9,6 +9,7 @@ import IntegratedSubtitlePanel from '../components/IntegratedSubtitlePanel';
 import VideoPlayerHeader from '../components/VideoPlayerHeader';
 import GlobalSubtitleSettings from '../components/GlobalSubtitleSettings';
 import RegenerateCaptionsModal from '../components/RegenerateCaptionsModal';
+import RetranscribeModal from '../components/RetranscribeModal';
 
 // Hooks
 import { useProjects } from '../hooks/useProjects';
@@ -38,6 +39,8 @@ const ProjectEditorPage = () => {
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [showRegenerateCaptions, setShowRegenerateCaptions] = useState(false);
+  const [showRetranscribe, setShowRetranscribe] = useState(false);
+  const [isRetranscribing, setIsRetranscribing] = useState(false);
   const [translationStatus, setTranslationStatus] = useState<{ status: string; message: string; progress?: number } | null>(null);
   // Define the export status type
   interface ExportStatus {
@@ -299,24 +302,64 @@ const ProjectEditorPage = () => {
     navigate('/');
   }, [clearSubtitles, navigate]);
 
-  const handleTranslateText = useCallback(async (text: string) => {
+    const handleTranslateText = useCallback(async (text: string) => {
     try {
-      const translation = await translateText(text);
-      const subtitle = subtitles.find(s => 
-        s.originalText === text || 
-        s.text === text || 
-        (s.originalText || s.text) === text
-      );
-      if (subtitle) {
-        updateSubtitle(subtitle.id, { translatedText: translation.translated });
-      } else {
-        console.warn('Could not find subtitle to update with translation:', text);
-      }
+      const translated = await translateText(text, 'en', 'ar');
+      return translated;
     } catch (error) {
       console.error('Translation failed:', error);
       throw error;
     }
-  }, [translateText, subtitles, updateSubtitle]);
+  }, [translateText]);
+
+  // Handle retranscription with language selection
+  const handleRetranscribe = useCallback(async (language: string) => {
+    if (!projectId) return;
+
+    try {
+      setIsRetranscribing(true);
+      setShowRetranscribe(false); // Close modal
+      
+      // Call retranscribe API
+      await projectService.retranscribeProject(projectId, language !== 'auto' ? language : undefined);
+      
+      alert('بدأت عملية إعادة التوليد. سيتم تحديث الترجمات تلقائياً عند الانتهاء.');
+      
+    } catch (error) {
+      console.error('Retranscribe failed:', error);
+      alert(`فشل في بدء عملية إعادة التوليد: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`);
+      setIsRetranscribing(false);
+    }
+  }, [projectId]);
+
+  // Listen for retranscription status updates via WebSocket
+  useEffect(() => {
+    if (!projectId) return;
+
+    const handleRetranscribeMessage = (message: any) => {
+      if (message.project_id !== projectId) return;
+      
+      if (message.type === 'status') {
+        if (message.status === 'retranscribing') {
+          // Show retranscription progress
+          console.log('Retranscription in progress:', message.message);
+        } else if (message.status === 'retranscribe_completed') {
+          setIsRetranscribing(false);
+          alert(message.message || 'تم إعادة توليد الترجمات بنجاح!');
+          // Subtitles will be updated via the subtitle update handler
+        } else if (message.status === 'retranscribe_failed') {
+          setIsRetranscribing(false);
+          alert(message.message || 'فشلت عملية إعادة التوليد');
+        }
+      }
+    };
+
+    webSocketService.addEventListener(projectId, handleRetranscribeMessage);
+
+    return () => {
+      webSocketService.removeEventListener(projectId, handleRetranscribeMessage);
+    };
+  }, [projectId]);
 
   const handleSeekToSubtitle = useCallback((startTime: number, subtitleId: string) => {
     setCurrentTime(startTime);
@@ -588,6 +631,7 @@ const ProjectEditorPage = () => {
           onBackToHome={handleBackToHome}
           onShowGlobalSettings={() => setShowGlobalSettings(true)}
           onRegenerateCaptions={() => setShowRegenerateCaptions(true)}
+          onRetranscribe={() => setShowRetranscribe(true)}
           onExport={handleExportSubtitles}
           onExportVideo={handleExportVideo}
         />
@@ -649,6 +693,15 @@ const ProjectEditorPage = () => {
         onClose={() => setShowRegenerateCaptions(false)}
         projectId={projectId || ''}
         onSuccess={handleRegenerateCaptionsSuccess}
+      />
+
+      {/* Retranscribe Modal */}
+      <RetranscribeModal
+        isOpen={showRetranscribe}
+        onClose={() => setShowRetranscribe(false)}
+        onRetranscribe={handleRetranscribe}
+        isProcessing={isRetranscribing}
+        currentLanguage={videoInfo?.source_language}
       />
 
     </div>

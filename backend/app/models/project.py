@@ -7,10 +7,17 @@ class YouTubeProcessRequest(BaseModel):
     project_id: str
     resolution: str = "720p"  # Options: "144p", "240p", "360p", "480p", "720p", "1080p", "best", "worst"
     video_info: Optional[dict] = None  # Optional field to pass pre-fetched video info
+    language: Optional[str] = None  # Optional language code for transcription (e.g., 'en', 'ar', 'es')
+    audio_language: Optional[str] = None  # Optional audio language for multi-track videos (e.g., 'en', 'ar', 'es')
 
 class FileUploadRequest(BaseModel):
     project_id: str
     title: str
+    language: Optional[str] = None  # Optional language code for transcription
+
+class RetranscribeRequest(BaseModel):
+    project_id: str
+    language: Optional[str] = None  # Optional language code for transcription (e.g., 'en', 'ar', 'es')
 
 class ProjectResponse(BaseModel):
     id: str

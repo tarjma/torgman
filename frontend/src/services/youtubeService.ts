@@ -10,6 +10,8 @@ export interface YouTubeVideoInfo {
   description?: string;
   available_resolutions?: string[];
   recommended_resolution?: string;
+  available_audio_languages?: string[];
+  original_audio_language?: string;
   resolution_sizes?: Array<{
     resolution: string;
     bytes: number;
@@ -29,6 +31,7 @@ export interface ProcessYouTubeRequest {
   // Legacy field kept optional for backward compatibility; backend now derives source language automatically
   language?: string;
   resolution?: string;
+  audio_language?: string;
   video_info?: YouTubeVideoInfo; // Optional field to pass pre-fetched video info
 }
 

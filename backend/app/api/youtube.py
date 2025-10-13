@@ -122,7 +122,9 @@ async def get_youtube_info(url: str):
         "description": video_info.get("description"),
         "available_resolutions": sorted_resolutions,
         "recommended_resolution": recommended_resolution,
-        "resolution_sizes": resolution_sizes
+        "resolution_sizes": resolution_sizes,
+        "available_audio_languages": video_info.get("available_audio_languages", []),
+        "original_audio_language": video_info.get("original_audio_language")
     }
 
 @router.post("/process")
@@ -175,7 +177,9 @@ async def process_youtube_video(request: YouTubeProcessRequest):
     asyncio.create_task(process_youtube_video_task(
         request.url, 
         request.project_id, 
-        request.resolution
+        request.resolution,
+        request.language,
+        request.audio_language
     ))
     
     return {

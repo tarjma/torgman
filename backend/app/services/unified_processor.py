@@ -23,8 +23,19 @@ class UnifiedVideoProcessor:
         self.file_processor = VideoFileProcessor()
         self.subtitle_generator = TranscriptionGenerator()
     
-    async def process_youtube_video(self, url: str, project_id: str, resolution: str = "720p"):
-        """Process a YouTube video with unified workflow"""
+    async def process_youtube_video(self, url: str, project_id: str, resolution: str = "720p", 
+                                   language: str = None, audio_language: str = None):
+        """Process a YouTube video with unified workflow
+        
+        Args:
+            url: YouTube video URL
+            project_id: Project identifier
+            resolution: Video resolution to download
+            language: Optional language code for transcription (e.g., 'en', 'ar', 'es'). 
+                     If None or 'auto', Whisper will auto-detect the language.
+            audio_language: Optional audio language code for multi-track videos (e.g., 'en', 'ar', 'es').
+                           If None, yt-dlp will select the best available audio track.
+        """
         try:
             # Send initial status
             await self._send_status(project_id, "downloading_video", 5, f"Downloading YouTube video in {resolution}...")
@@ -33,7 +44,7 @@ class UnifiedVideoProcessor:
             video_info = self.youtube_processor.get_video_info(url)
             
             # Step 1: Download full video
-            video_path = self.youtube_processor.download_video(url, project_id, resolution, video_info)
+            video_path = self.youtube_processor.download_video(url, project_id, resolution, video_info, audio_language)
             
             await self._send_status(project_id, "downloading_thumbnail", 20, "Downloading video thumbnail...")
             
@@ -41,7 +52,7 @@ class UnifiedVideoProcessor:
             thumbnail_path = self.youtube_processor.download_thumbnail(url, project_id)
             
             # Step 3: Process audio and generate subtitles
-            subtitles = await self._process_audio_and_subtitles(video_path, project_id, 35)
+            subtitles = await self._process_audio_and_subtitles(video_path, project_id, 35, language=language)
             
             # Step 4: Save YouTube-specific metadata
             await self._send_status(project_id, "saving_data", 90, "Saving project data...")
@@ -67,8 +78,15 @@ class UnifiedVideoProcessor:
         except Exception as e:
             await self._handle_error(project_id, e, "YouTube video processing")
             
-    async def process_video_file(self, file_path: str, project_id: str):
-        """Process an uploaded video file with unified workflow"""
+    async def process_video_file(self, file_path: str, project_id: str, language: str = None):
+        """Process an uploaded video file with unified workflow
+        
+        Args:
+            file_path: Path to the uploaded video file
+            project_id: Project identifier
+            language: Optional language code for transcription (e.g., 'en', 'ar', 'es'). 
+                     If None or 'auto', Whisper will auto-detect the language.
+        """
         try:
             # Send initial status
             await self._send_status(project_id, "processing", 10, "Processing uploaded video file...")
@@ -81,7 +99,7 @@ class UnifiedVideoProcessor:
             project_manager.update_project_status(project_id, "processing", None)
             
             # Step 2: Process audio and generate subtitles
-            subtitles = await self._process_audio_and_subtitles(file_path, project_id, 40)
+            subtitles = await self._process_audio_and_subtitles(file_path, project_id, 40, language=language)
             
             # Step 3: Save file-specific metadata
             project_dir = settings.get_project_dir(project_id)
@@ -97,8 +115,16 @@ class UnifiedVideoProcessor:
         except Exception as e:
             await self._handle_error(project_id, e, "video file processing")
     
-    async def _process_audio_and_subtitles(self, video_path: str, project_id: str, start_progress: int):
-        """Common audio processing and subtitle generation workflow"""
+    async def _process_audio_and_subtitles(self, video_path: str, project_id: str, start_progress: int, language: str = None):
+        """Common audio processing and subtitle generation workflow
+        
+        Args:
+            video_path: Path to the video file
+            project_id: Project identifier
+            start_progress: Starting progress percentage
+            language: Optional language code for transcription (e.g., 'en', 'ar', 'es'). 
+                     If None or 'auto', Whisper will auto-detect the language.
+        """
         # Extract audio
         await self._send_status(project_id, "extracting_audio", start_progress, "Extracting audio from video...")
         
@@ -109,7 +135,12 @@ class UnifiedVideoProcessor:
                                "Generating subtitles with speech recognition...")
         
         # Generate subtitles and store word-level data for post-processing
-        result = self.subtitle_generator.whisper_model.transcribe(audio_path, word_timestamps=True)
+        # If language is specified, pass it to Whisper; otherwise let it auto-detect
+        transcribe_options = {"word_timestamps": True}
+        if language and language != "auto":
+            transcribe_options["language"] = language
+            
+        result = self.subtitle_generator.whisper_model.transcribe(audio_path, **transcribe_options)
         all_words = [word for segment in result["segments"] for word in segment.get("words", [])]
         
         # Store word-level data for later regeneration

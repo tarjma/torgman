@@ -285,21 +285,31 @@ class TranscriptionGenerator:
         logger.info(f"Regenerated {len(captions)} caption segments")
         return captions
 
-    def generate_transcription(self, audio_path: str) -> List[Dict[str, Any]]:
+    def generate_transcription(self, audio_path: str, language: str = None) -> List[Dict[str, Any]]:
         """Public method to transcribe an audio file and generate formatted captions.
+
+        Args:
+            audio_path: Path to the audio file to transcribe
+            language: Optional language code (e.g., 'en', 'ar', 'es'). 
+                     If None, Whisper will auto-detect the language.
 
         NOTE: Whisper returns a detected language code in result.get('language'). We will attach it
         to each caption only via project metadata update elsewhere (UnifiedVideoProcessor) rather than
         mutating caption objects here to keep payload minimal.
         """
         
-        logger.info(f"Transcribing audio file: {audio_path}")
+        logger.info(f"Transcribing audio file: {audio_path} with language: {language or 'auto-detect'}")
         if not Path(audio_path).exists():
             logger.error(f"Audio file not found: {audio_path}")
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
         
         # Whisper output gives us segments, but we want a flat list of words for processing.
-        result = self.whisper_model.transcribe(audio_path, word_timestamps=True)
+        # If language is specified, pass it to Whisper; otherwise let it auto-detect
+        transcribe_options = {"word_timestamps": True}
+        if language and language != "auto":
+            transcribe_options["language"] = language
+            
+        result = self.whisper_model.transcribe(audio_path, **transcribe_options)
         # Store detected language for external access if needed
         self.last_detected_language = result.get("language") or "en"
 
@@ -309,7 +319,7 @@ class TranscriptionGenerator:
             logger.warning("Whisper did not detect any words in the audio.")
             return []
 
-        logger.info(f"Extracted {len(all_words)} words from transcription")
+        logger.info(f"Extracted {len(all_words)} words from transcription (detected language: {self.last_detected_language})")
 
         captions = self.generate_captions(all_words)
         logger.info(f"Generated {len(captions)} caption segments")

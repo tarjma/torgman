@@ -68,9 +68,11 @@ export const useProjects = (userId?: string) => {
     projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'userId'>,
     resolution: string = '720p',
     videoFile?: File,
-    preFetchedVideoInfo?: any // Add parameter for pre-fetched video info
+    preFetchedVideoInfo?: any, // Add parameter for pre-fetched video info
+    language?: string, // Add language parameter for transcription
+    audioLanguage?: string // Add audio language parameter for multi-track videos
   ): Promise<Project | null> => {
-    console.log('createProject called', { projectData, resolution, videoFile: !!videoFile, userId });
+    console.log('createProject called', { projectData, resolution, videoFile: !!videoFile, language, audioLanguage, userId });
     
     if (!userId) {
       console.log('No userId, returning null');
@@ -95,12 +97,14 @@ export const useProjects = (userId?: string) => {
           videoInfo = await youtubeService.getVideoInfo(projectData.videoUrl);
         }
         
-        // Start processing the video with resolution
+        // Start processing the video with resolution, language, and audio language
         await youtubeService.processVideo({
           url: projectData.videoUrl,
           project_id: projectId,
           resolution,
-          video_info: videoInfo // Pass pre-fetched video info
+          video_info: videoInfo, // Pass pre-fetched video info
+          language, // Pass language parameter for transcription
+          audio_language: audioLanguage // Pass audio language parameter for multi-track videos
         });
 
         // Connect to WebSocket for real-time updates
@@ -130,7 +134,8 @@ export const useProjects = (userId?: string) => {
           videoFile,
           projectId,
           projectData.title,
-          projectData.description
+          projectData.description,
+          language
         );
         
         console.log('File uploaded successfully');

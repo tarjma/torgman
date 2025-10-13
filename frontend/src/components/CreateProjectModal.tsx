@@ -25,7 +25,7 @@ type ProjectType = 'youtube' | 'file';
 interface CreateProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateProject: (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'userId'>, videoFile?: File, youtubeUrl?: string, resolution?: string, videoInfo?: YouTubeVideoInfo) => Promise<void>;
+  onCreateProject: (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'userId'>, videoFile?: File, youtubeUrl?: string, resolution?: string, videoInfo?: YouTubeVideoInfo, language?: string, audioLanguage?: string) => Promise<void>;
   isProcessing: boolean;
   progress: number;
 }
@@ -44,6 +44,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [resolution, setResolution] = useState('720p');
+  const [projectLanguage, setProjectLanguage] = useState('auto');
+  const [audioLanguage, setAudioLanguage] = useState<string>('auto');
   
   // YouTube video info states
   const [videoInfo, setVideoInfo] = useState<YouTubeVideoInfo | null>(null);
@@ -65,6 +67,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setYoutubeUrl('');
     setSelectedFile(null);
     setResolution('720p');
+    setProjectLanguage('auto');
+    setAudioLanguage('auto');
     setVideoInfo(null);
     setVideoInfoError(null);
     setIsLoadingVideoInfo(false);
@@ -99,6 +103,13 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       setVideoInfo(null);
     }
   }, [youtubeUrl, projectType]);
+  
+  // Set default audio language to original when video info loads
+  useEffect(() => {
+    if (videoInfo?.original_audio_language && videoInfo.available_audio_languages?.length) {
+      setAudioLanguage(videoInfo.original_audio_language);
+    }
+  }, [videoInfo]);
   
   // Listen to WebSocket updates during modal processing
   useEffect(() => {
@@ -275,12 +286,14 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         !isYoutube ? selectedFile || undefined : undefined,
         isYoutube ? youtubeUrl.trim() : undefined,
         isYoutube ? resolution : undefined,
-        isYoutube ? videoInfo || undefined : undefined
+        isYoutube ? videoInfo || undefined : undefined,
+        projectLanguage !== 'auto' ? projectLanguage : undefined,
+        isYoutube && audioLanguage !== 'auto' ? audioLanguage : undefined
       );
     } catch (error) {
       console.error('Project creation failed:', error);
     }
-  }, [projectTitle, projectDescription, projectType, selectedFile, youtubeUrl, videoInfo, resolution, onCreateProject]);
+  }, [projectTitle, projectDescription, projectType, selectedFile, youtubeUrl, videoInfo, resolution, projectLanguage, audioLanguage, onCreateProject]);
 
   if (!isOpen) return null;
 
@@ -641,6 +654,89 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               {validationErrors.file && (
                 <p className="mt-2 text-sm text-red-600">{validationErrors.file}</p>
               )}
+            </div>
+          )}
+
+          {/* Language Selection */}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700">
+              لغة التفريغ النصي
+            </label>
+            <select
+              value={projectLanguage}
+              onChange={(e) => setProjectLanguage(e.target.value)}
+              disabled={isProcessing}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+            >
+              <option value="auto">كشف تلقائي</option>
+              <option value="ar">العربية</option>
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="it">Italiano</option>
+              <option value="pt">Português</option>
+              <option value="ru">Русский</option>
+              <option value="ja">日本語</option>
+              <option value="ko">한국어</option>
+              <option value="zh">中文</option>
+              <option value="hi">हिन्दी</option>
+              <option value="tr">Türkçe</option>
+              <option value="pl">Polski</option>
+              <option value="nl">Nederlands</option>
+            </select>
+            <p className="text-xs text-gray-500">
+              اختر لغة الفيديو للتفريغ النصي أو استخدم الكشف التلقائي
+            </p>
+          </div>
+
+          {/* Audio Language Selection (YouTube only) */}
+          {projectType === 'youtube' && videoInfo?.available_audio_languages && videoInfo.available_audio_languages.length > 1 && (
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-gray-700">
+                لغة الصوت (للفيديوهات متعددة اللغات)
+              </label>
+              <select
+                value={audioLanguage}
+                onChange={(e) => setAudioLanguage(e.target.value)}
+                disabled={isProcessing}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+              >
+                {videoInfo.available_audio_languages.map((lang) => {
+                  const isOriginal = lang === videoInfo.original_audio_language || lang.startsWith(videoInfo.original_audio_language || '');
+                  const getLanguageName = (code: string) => {
+                    const langMap: { [key: string]: string } = {
+                      'ar': 'العربية',
+                      'en': 'English',
+                      'es': 'Español',
+                      'fr': 'Français',
+                      'de': 'Deutsch',
+                      'it': 'Italiano',
+                      'pt': 'Português',
+                      'ru': 'Русский',
+                      'ja': '日本語',
+                      'ko': '한국어',
+                      'zh': '中文',
+                      'hi': 'हिन्दी',
+                      'tr': 'Türkçe',
+                      'pl': 'Polski',
+                      'nl': 'Nederlands'
+                    };
+                    // Check for exact match or language prefix (e.g., 'en-US' -> 'en')
+                    const baseCode = code.split('-')[0];
+                    return langMap[code] || langMap[baseCode] || code;
+                  };
+                  
+                  return (
+                    <option key={lang} value={lang}>
+                      {getLanguageName(lang)}{isOriginal ? ' (اللغة الأصلية)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="text-xs text-gray-500">
+                هذا الفيديو يحتوي على صوتيات بلغات متعددة. اختر اللغة المفضلة لتحميل الصوت
+              </p>
             </div>
           )}
 

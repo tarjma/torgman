@@ -64,6 +64,23 @@ export const projectService = {
     await apiClient.delete(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}`);
   },
 
+  async retranscribeProject(projectId: string, language?: string): Promise<{
+    project_id: string;
+    status: string;
+    message: string;
+    language: string;
+  }> {
+    const params = new URLSearchParams();
+    if (language) {
+      params.append('language', language);
+    }
+    
+    const response = await apiClient.post(
+      `${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/retranscribe${params.toString() ? '?' + params.toString() : ''}`
+    );
+    return response.data;
+  },
+
   async updateProjectStatus(projectId: string, status: string, subtitleCount?: number): Promise<void> {
     const params = new URLSearchParams();
     params.append('status', status);
@@ -78,13 +95,14 @@ export const projectService = {
     file: File,
     projectId: string, 
     title: string,
-    description?: string
+    description?: string,
+    language?: string
   ): Promise<{
     project_id: string;
     status: string;
     message: string;
   }> {
-  console.log('uploadProjectFile called', { fileName: file.name, projectId, title, description });
+  console.log('uploadProjectFile called', { fileName: file.name, projectId, title, description, language });
     
     const formData = new FormData();
     formData.append('file', file);
@@ -93,7 +111,9 @@ export const projectService = {
     if (description) {
       formData.append('description', description);
     }
-  // No language field sent; backend will detect source language via Whisper
+    if (language) {
+      formData.append('language', language);
+    }
 
     console.log('Making API call to upload endpoint...');
     
