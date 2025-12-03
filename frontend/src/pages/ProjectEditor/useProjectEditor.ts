@@ -100,8 +100,6 @@ export interface UseProjectEditorReturn {
   saveNow: (() => void) | undefined;
   
   // Modal controls
-  showGlobalSettings: boolean;
-  setShowGlobalSettings: (show: boolean) => void;
   showRegenerateCaptions: boolean;
   setShowRegenerateCaptions: (show: boolean) => void;
   showRetranscribe: boolean;
@@ -153,7 +151,6 @@ export function useProjectEditor(): UseProjectEditorReturn {
 
   // Local state
   const [isAutoSaving, setIsAutoSaving] = useState(false);
-  const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [showRegenerateCaptions, setShowRegenerateCaptions] = useState(false);
   const [showRetranscribe, setShowRetranscribe] = useState(false);
   const [isRetranscribing, setIsRetranscribing] = useState(false);
@@ -539,8 +536,6 @@ export function useProjectEditor(): UseProjectEditorReturn {
     saveNow,
 
     // Modal controls
-    showGlobalSettings,
-    setShowGlobalSettings,
     showRegenerateCaptions,
     setShowRegenerateCaptions,
     showRetranscribe,

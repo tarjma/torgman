@@ -3,7 +3,6 @@ import { Play, Pause, Volume, Volume1, Volume2, VolumeX, Maximize, SkipBack, Ski
 import { Subtitle } from '../types';
 import { formatTime } from '../utils/exportUtils';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
-import SubtitleConfigModal from './SubtitleConfigModal';
 
 interface VideoPlayerProps {
   videoSrc?: string;
@@ -47,7 +46,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   });
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
-  const [showSubtitleConfig, setShowSubtitleConfig] = useState(false);
   const [intrinsicSize, setIntrinsicSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [renderedSize, setRenderedSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   
@@ -513,12 +511,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
         </div>
       </div>
-      
-      {/* Subtitle Configuration Modal */}
-      <SubtitleConfigModal 
-        isOpen={showSubtitleConfig} 
-        onClose={() => setShowSubtitleConfig(false)} 
-      />
     </div>
   );
 };

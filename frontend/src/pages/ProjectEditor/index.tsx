@@ -13,7 +13,6 @@ import { Languages, Loader2 } from 'lucide-react';
 import VideoPlayer from '../../components/VideoPlayer';
 import IntegratedSubtitlePanel from '../../components/IntegratedSubtitlePanel';
 import VideoPlayerHeader from '../../components/VideoPlayerHeader';
-import GlobalSubtitleSettings from '../../components/GlobalSubtitleSettings';
 import RegenerateCaptionsModal from '../../components/RegenerateCaptionsModal';
 import RetranscribeModal from '../../components/RetranscribeModal';
 
@@ -70,8 +69,6 @@ const ProjectEditorPage = () => {
     saveNow,
     
     // Modal controls
-    showGlobalSettings,
-    setShowGlobalSettings,
     showRegenerateCaptions,
     setShowRegenerateCaptions,
     showRetranscribe,
@@ -244,7 +241,6 @@ const ProjectEditorPage = () => {
           subtitleCount={subtitles.length}
           isExporting={!!(exportStatus && !['export_completed', 'export_failed'].includes(exportStatus.status))}
           onBackToHome={handleBackToHome}
-          onShowGlobalSettings={() => setShowGlobalSettings(true)}
           onRegenerateCaptions={() => setShowRegenerateCaptions(true)}
           onRetranscribe={() => setShowRetranscribe(true)}
           onExport={handleExportSubtitles}
@@ -295,11 +291,6 @@ const ProjectEditorPage = () => {
       </div>
 
       {/* Modals */}
-      <GlobalSubtitleSettings
-        isOpen={showGlobalSettings}
-        onClose={() => setShowGlobalSettings(false)}
-      />
-
       <RegenerateCaptionsModal
         isOpen={showRegenerateCaptions}
         onClose={() => setShowRegenerateCaptions(false)}

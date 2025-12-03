@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Plus, Edit3, Trash2, Copy, Wand2, Clock, Settings, Save, FileText, ChevronUp, ChevronDown, Languages } from 'lucide-react';
+import { Plus, Edit3, Trash2, Copy, Wand2, Clock, Settings, Save, FileText, ChevronUp, ChevronDown, Languages, Palette } from 'lucide-react';
 import { Subtitle } from '../types';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
 import FontSelector from './FontSelector';
+import SubtitleStylePanel from './SubtitleStylePanel';
 
 interface IntegratedSubtitlePanelProps {
   subtitles: Subtitle[];
@@ -45,6 +46,7 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
   const [expandedSubtitle, setExpandedSubtitle] = useState<string | null>(null);
   const [isTranslatingProject, setIsTranslatingProject] = useState(false);
   const [translatingSubtitleId, setTranslatingSubtitleId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<'captions' | 'style'>('captions');
   const { translateProject } = useSubtitleConfig();
 
   // Handle WebSocket translation status updates
@@ -331,18 +333,51 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
         </div>
       </div>
 
-      {/* Subtitles List */}
-      <div 
-        ref={subtitleListRef}
-        className="flex-1 overflow-y-auto bg-gray-50"
-      >
-        {subtitles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full py-12 px-6 text-center">
-            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Edit3 className="w-10 h-10 text-blue-500" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">لا توجد ترجمات بعد</h3>
-            <p className="text-gray-500 mb-6 max-w-xs">ابدأ بإضافة ترجمة جديدة لتظهر على الفيديو</p>
+      {/* View Toggle - Captions vs Style */}
+      <div className="flex-shrink-0 bg-white border-b border-gray-200 p-2">
+        <div className="flex bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => setActiveView('captions')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              activeView === 'captions'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            الترجمات
+          </button>
+          <button
+            onClick={() => setActiveView('style')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              activeView === 'style'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            <Palette className="w-4 h-4" />
+            التنسيق
+          </button>
+        </div>
+      </div>
+
+      {/* Content Area - Either Captions or Style */}
+      {activeView === 'style' ? (
+        <div className="flex-1 overflow-y-auto">
+          <SubtitleStylePanel />
+        </div>
+      ) : (
+        <div 
+          ref={subtitleListRef}
+          className="flex-1 overflow-y-auto bg-gray-50"
+        >
+          {subtitles.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full py-12 px-6 text-center">
+              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Edit3 className="w-10 h-10 text-blue-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">لا توجد ترجمات بعد</h3>
+              <p className="text-gray-500 mb-6 max-w-xs">ابدأ بإضافة ترجمة جديدة لتظهر على الفيديو</p>
             <button
               onClick={handleAddSubtitle}
               className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 flex items-center gap-2 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
@@ -633,7 +668,8 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
             ))}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
