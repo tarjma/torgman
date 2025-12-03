@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from google.genai.errors import ServerError
 from fastapi.responses import JSONResponse
 
@@ -17,7 +18,31 @@ from .core.config import settings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title=settings.app_name)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager for startup and shutdown events"""
+    # Startup: Initialize application and debug routes
+    settings.projects_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Debug: Print registered routes
+    logger.info("=== Registered Routes ===")
+    for route in app.routes:
+        if hasattr(route, 'path') and hasattr(route, 'methods'):
+            logger.info(f"Route: {route.path} - Methods: {route.methods}")
+        elif hasattr(route, 'path'):
+            logger.info(f"Route: {route.path}")
+    logger.info("=========================")
+    
+    logger.info("Application started successfully")
+    
+    yield
+    
+    # Shutdown: cleanup if needed
+    logger.info("Application shutting down")
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
@@ -85,23 +110,6 @@ async def list_projects_no_slash(limit: int = 50, offset: int = 0):
     # Import here to avoid circular imports
     from .api.projects import list_projects
     return await list_projects(limit=limit, offset=offset)
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application and debug routes"""
-    # Ensure projects directory exists
-    settings.projects_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Debug: Print registered routes
-    logger.info("=== Registered Routes ===")
-    for route in app.routes:
-        if hasattr(route, 'path') and hasattr(route, 'methods'):
-            logger.info(f"Route: {route.path} - Methods: {route.methods}")
-        elif hasattr(route, 'path'):
-            logger.info(f"Route: {route.path}")
-    logger.info("=========================")
-    
-    logger.info("Application started successfully")
 
 @app.get("/api/health")
 async def health_check():
