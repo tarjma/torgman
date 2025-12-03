@@ -284,7 +284,7 @@ const ProjectEditorPage = () => {
             subtitles={subtitles}
             currentTime={currentTime}
             onTimeUpdate={handleTimeUpdate}
-            onDurationChange={(duration) => console.log('Duration:', duration)}
+            onDurationChange={() => {}}
             sourceLangCode={
               (project?.source_language as string) || 
               (project?.language as string) || 

@@ -37,78 +37,56 @@ class WebSocketManager {
       if (this.connections.has(projectId)) {
         const state = this.connections.get(projectId)!;
         if (state.ws.readyState === WebSocket.OPEN) {
-          console.log(`Already connected to project ${projectId}`);
           resolve();
           return;
         }
-        // Connection exists but not open, clean it up
         this.cleanupConnection(projectId);
       }
 
       const wsUrl = buildProjectWsUrl(projectId);
+      const ws = new WebSocket(wsUrl);
 
-      try {
-        console.log(`Connecting to WebSocket for project ${projectId}: ${wsUrl}`);
-        const ws = new WebSocket(wsUrl);
+      const state: ConnectionState = {
+        ws,
+        heartbeatTimer: null,
+        connectionCheckTimer: null,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+        lastHeartbeatTime: Date.now(),
+        isManualDisconnect: false,
+      };
 
-        const state: ConnectionState = {
-          ws,
-          heartbeatTimer: null,
-          connectionCheckTimer: null,
-          reconnectTimer: null,
-          reconnectAttempts: 0,
-          lastHeartbeatTime: Date.now(),
-          isManualDisconnect: false,
-        };
+      ws.onopen = () => {
+        state.reconnectAttempts = 0;
+        state.isManualDisconnect = false;
+        state.lastHeartbeatTime = Date.now();
+        this.connections.set(projectId, state);
+        this.startHeartbeat(projectId);
+        this.startConnectionMonitoring(projectId);
+        resolve();
+      };
 
-        ws.onopen = () => {
-          console.log(`WebSocket connected for project ${projectId}`);
-          state.reconnectAttempts = 0;
-          state.isManualDisconnect = false;
-          state.lastHeartbeatTime = Date.now();
-          this.connections.set(projectId, state);
-          this.startHeartbeat(projectId);
-          this.startConnectionMonitoring(projectId);
-          resolve();
-        };
+      ws.onmessage = (event) => {
+        const message: WebSocketMessage = JSON.parse(event.data);
+        const connState = this.connections.get(projectId);
+        if (connState) {
+          connState.lastHeartbeatTime = Date.now();
+        }
+        this.handleMessage(message);
+      };
 
-        ws.onmessage = (event) => {
-          try {
-            const message: WebSocketMessage = JSON.parse(event.data);
-            console.log(`WebSocket message from project ${projectId}:`, message);
+      ws.onclose = () => {
+        const connState = this.connections.get(projectId);
+        if (connState && !connState.isManualDisconnect) {
+          this.attemptReconnect(projectId);
+        } else {
+          this.cleanupConnection(projectId);
+        }
+      };
 
-            // Update last heartbeat time
-            const connState = this.connections.get(projectId);
-            if (connState) {
-              connState.lastHeartbeatTime = Date.now();
-            }
-
-            this.handleMessage(message);
-          } catch (error) {
-            console.error(`Error parsing WebSocket message from project ${projectId}:`, error);
-          }
-        };
-
-        ws.onclose = (event) => {
-          console.log(`WebSocket connection closed for project ${projectId}`, {
-            code: event.code,
-            reason: event.reason,
-          });
-          const connState = this.connections.get(projectId);
-          if (connState && !connState.isManualDisconnect) {
-            this.attemptReconnect(projectId);
-          } else {
-            this.cleanupConnection(projectId);
-          }
-        };
-
-        ws.onerror = (error) => {
-          console.error(`WebSocket error for project ${projectId}:`, error);
-          reject(error);
-        };
-      } catch (error) {
+      ws.onerror = (error) => {
         reject(error);
-      }
+      };
     });
   }
 
@@ -174,13 +152,10 @@ class WebSocketManager {
    * Ensure connections to multiple projects (for home page)
    */
   async ensureProjectConnections(projectIds: string[]): Promise<void> {
-    console.log(`Ensuring WebSocket connections for projects:`, projectIds);
-
     // Disconnect from projects that are no longer needed (except active project)
     const currentConnections = Array.from(this.connections.keys());
     for (const connectedProject of currentConnections) {
       if (!projectIds.includes(connectedProject) && connectedProject !== this.activeProjectId) {
-        console.log(`Disconnecting from obsolete project: ${connectedProject}`);
         this.disconnect(connectedProject);
       }
     }
@@ -188,11 +163,7 @@ class WebSocketManager {
     // Connect to new projects
     const connectPromises = projectIds
       .filter((projectId) => !this.connections.has(projectId))
-      .map((projectId) =>
-        this.connect(projectId).catch((error) => {
-          console.error(`Failed to connect to project ${projectId}:`, error);
-        })
-      );
+      .map((projectId) => this.connect(projectId).catch(() => {}));
 
     await Promise.all(connectPromises);
   }
@@ -279,7 +250,6 @@ class WebSocketManager {
     }
 
     if (!this.isConnected(this.activeProjectId)) {
-      console.log('Active project not connected, reconnecting...');
       await this.connect(this.activeProjectId);
     }
   }
@@ -292,7 +262,6 @@ class WebSocketManager {
       throw new Error('No active project set for reconnection');
     }
 
-    console.log(`Forcing reconnection to project ${this.activeProjectId}`);
     this.disconnect(this.activeProjectId);
     await this.connect(this.activeProjectId);
   }
@@ -307,25 +276,14 @@ class WebSocketManager {
     if (!state) return false;
 
     const timeSinceLastMessage = Date.now() - state.lastHeartbeatTime;
-    const isStale = timeSinceLastMessage > 45000;
-
-    if (isStale) {
-      console.warn(
-        `WebSocket connection is stale (${timeSinceLastMessage}ms since last message)`
-      );
-    }
-
-    return this.isConnected(this.activeProjectId) && !isStale;
+    return this.isConnected(this.activeProjectId) && timeSinceLastMessage <= 45000;
   }
 
   // Private methods
 
   private handleMessage(message: WebSocketMessage): void {
     // Handle pong messages specially (don't emit to handlers)
-    if (message.type === 'pong') {
-      console.log(`Received pong from project ${message.project_id} - connection is alive`);
-      return;
-    }
+    if (message.type === 'pong') return;
 
     // Emit to specific event type handlers
     const handlers = this.eventHandlers.get(message.type);
@@ -358,7 +316,6 @@ class WebSocketManager {
       const connState = this.connections.get(projectId);
       if (connState && connState.ws.readyState === WebSocket.OPEN) {
         connState.ws.send(JSON.stringify({ type: 'ping', project_id: projectId }));
-        console.log(`Sent heartbeat to project ${projectId}`);
       }
     }, 15000);
   }
@@ -384,14 +341,8 @@ class WebSocketManager {
       const timeSinceLastMessage = Date.now() - connState.lastHeartbeatTime;
 
       // If no message received in 45 seconds, consider connection stale
-      if (timeSinceLastMessage > 45000) {
-        console.warn(`WebSocket connection for project ${projectId} appears stale`);
-        // Only force reconnect for the active project
-        if (projectId === this.activeProjectId) {
-          this.forceReconnect().catch((error) => {
-            console.error('Forced reconnection failed:', error);
-          });
-        }
+      if (timeSinceLastMessage > 45000 && projectId === this.activeProjectId) {
+        this.forceReconnect().catch(() => {});
       }
     }, 30000);
   }
@@ -409,15 +360,11 @@ class WebSocketManager {
     if (!state) return;
 
     if (state.reconnectAttempts >= WS_CONFIG.MAX_RECONNECT_ATTEMPTS) {
-      console.error(`Max reconnection attempts reached for project ${projectId}`);
       this.cleanupConnection(projectId);
       return;
     }
 
     state.reconnectAttempts++;
-    console.log(
-      `Attempting to reconnect to project ${projectId} (${state.reconnectAttempts}/${WS_CONFIG.MAX_RECONNECT_ATTEMPTS})`
-    );
 
     state.reconnectTimer = window.setTimeout(() => {
       this.connect(projectId).catch((error) => {

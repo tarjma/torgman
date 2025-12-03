@@ -42,10 +42,6 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
   isAutoSaving,
   onTriggerAutoSave
 }) => {
-  console.log('IntegratedSubtitlePanel received subtitles:', subtitles);
-  console.log('Subtitles count:', subtitles.length);
-  console.log('Video title:', videoTitle); // Keep for potential future use
-  
   const [expandedSubtitle, setExpandedSubtitle] = useState<string | null>(null);
   const [isTranslatingProject, setIsTranslatingProject] = useState(false);
   const [translatingSubtitleId, setTranslatingSubtitleId] = useState<string | null>(null);
@@ -56,13 +52,10 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
     if (translationStatus) {
       if (translationStatus.status === 'completed' || translationStatus.status === 'completion') {
         setIsTranslatingProject(false);
-        console.log('Translation completed:', translationStatus.message);
       } else if (translationStatus.status === 'error') {
         setIsTranslatingProject(false);
-        console.error('Translation error:', translationStatus.message);
       } else if (translationStatus.status === 'translating') {
         setIsTranslatingProject(true);
-        console.log('Translation in progress:', translationStatus.message);
       }
     }
   }, [translationStatus]);
@@ -212,27 +205,17 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
       try {
         const { wsManager } = await import('../services/websocket');
         
-        // Check connection health first
         if (!wsManager.checkConnectionHealth()) {
-          console.log('WebSocket connection is not healthy, reconnecting...');
           await wsManager.forceReconnect();
         } else {
           await wsManager.ensureActiveConnection();
         }
-        
-        console.log('WebSocket connection verified before translation');
-      } catch (wsError) {
-        console.warn('WebSocket connection issue, attempting to reconnect:', wsError);
+      } catch {
         // Continue with translation even if WebSocket has issues
       }
       
       await translateProject(projectId);
-      
-      // If we reach here, the request was successful
-      // Don't show alert here - let the UI indicators show the progress
-      // Translation updates will be received via WebSocket
     } catch (error: any) {
-      console.error('Translation failed:', error);
       
       // More specific error messages
       let errorMessage = 'فشل في ترجمة المشروع. حاول مرة أخرى.';

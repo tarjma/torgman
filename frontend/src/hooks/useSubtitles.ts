@@ -70,9 +70,7 @@ export const useSubtitles = () => {
   }, [subtitles]);
 
   const loadSubtitles = useCallback((newSubtitles: Subtitle[]) => {
-    console.log('loadSubtitles called with:', newSubtitles);
     setSubtitles(newSubtitles.sort((a, b) => a.start_time - b.start_time));
-    console.log('Subtitles loaded, new count:', newSubtitles.length);
   }, []);
 
   const clearSubtitles = useCallback(() => {

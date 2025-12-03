@@ -14,7 +14,6 @@ export const useFonts = () => {
         setError(null);
         
         const availableFonts = await fontService.getAvailableFonts();
-        console.log('Received fonts from API:', availableFonts);
         
         // Ensure we have an array
         if (!Array.isArray(availableFonts)) {
@@ -25,10 +24,8 @@ export const useFonts = () => {
         
         // Transform into font families
         const families = fontService.getFontFamilies(availableFonts);
-        console.log('Transformed font families:', families);
         setFontFamilies(families);
       } catch (err) {
-        console.error('Error loading fonts:', err);
         setError('Failed to load fonts');
         // Set empty arrays as fallback
         setFonts([]);

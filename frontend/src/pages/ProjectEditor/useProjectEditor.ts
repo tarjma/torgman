@@ -210,11 +210,9 @@ export function useProjectEditor(): UseProjectEditorReturn {
   useProjectSubtitleUpdates(
     projectId,
     (updatedSubtitles) => {
-      console.log('Received subtitle update:', updatedSubtitles);
       loadSubtitles(updatedSubtitles);
     },
     (status, message) => {
-      console.log('Received status update:', status, message);
       setTranslationStatus({ status, message });
 
       if (status === 'completed' || status === 'completion') {
@@ -234,7 +232,6 @@ export function useProjectEditor(): UseProjectEditorReturn {
     projectId,
     translationStatus?.status === 'translating' || false,
     (polledSubtitles) => {
-      console.log('Received polled subtitle update:', polledSubtitles);
       loadSubtitles(polledSubtitles);
     }
   );
@@ -257,11 +254,8 @@ export function useProjectEditor(): UseProjectEditorReturn {
         const foundProject = projects.find((p) => p.id === projectId);
         if (!foundProject) {
           try {
-            console.log('Project not found in list, trying to load directly from backend...');
             await projectService.getProjectSubtitles(projectId);
-            console.log('Project exists in backend, continuing...');
           } catch {
-            console.error('Project not found in backend either');
             alert('المشروع غير موجود');
             navigate('/');
             return;
@@ -474,9 +468,7 @@ export function useProjectEditor(): UseProjectEditorReturn {
       if (message.project_id !== projectId) return;
 
       if (message.type === 'status') {
-        if (message.status === 'retranscribing') {
-          console.log('Retranscription in progress:', message.message);
-        } else if (message.status === 'retranscribe_completed') {
+        if (message.status === 'retranscribe_completed') {
           setIsRetranscribing(false);
           alert(message.message || 'تم إعادة توليد الترجمات بنجاح!');
           window.location.reload();

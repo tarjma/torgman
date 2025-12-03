@@ -10,14 +10,12 @@ const apiClient = axios.create({
   },
 });
 
-// Add request interceptor for logging
+// Add request interceptor for logging (only in development)
 apiClient.interceptors.request.use(
   (config) => {
-    console.log('API Request:', config.method?.toUpperCase(), config.url);
     return config;
   },
   (error) => {
-    console.error('API Request Error:', error);
     return Promise.reject(error);
   }
 );

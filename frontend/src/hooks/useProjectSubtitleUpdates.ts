@@ -17,24 +17,17 @@ export const useProjectSubtitleUpdates = (
   onStatusUpdate?: StatusUpdateHandler
 ) => {
   const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
-    // Only handle messages for the current project
     if (!projectId || message.project_id !== projectId) return;
     
-    console.log('WebSocket message received:', { project_id: message.project_id, type: message.type });
-    
     if (message.type === 'subtitles' && message.data) {
-      console.log('Processing subtitle update message:', message);
-      console.log('Subtitle data received:', message.data);
-      
-      // Convert backend subtitle format to frontend format
       const backendSubtitles = message.data;
       const frontendSubtitles: Subtitle[] = backendSubtitles.map((sub: any) => ({
-        id: sub.id || `sub_${Date.now()}_${Math.random()}`, // Generate ID if missing
+        id: sub.id || `sub_${Date.now()}_${Math.random()}`,
         start_time: sub.start_time,
         end_time: sub.end_time,
         text: sub.text,
         originalText: sub.text,
-        translatedText: sub.translation || '', // Include translation from backend
+        translatedText: sub.translation || '',
         position: { x: 50, y: 80 },
         styling: {
           fontFamily: 'Noto Sans Arabic, Arial, sans-serif',
@@ -50,12 +43,9 @@ export const useProjectSubtitleUpdates = (
         }
       }));
       
-      console.log('Converted subtitles:', frontendSubtitles);
       onSubtitlesUpdate(frontendSubtitles);
     } else if ((message.type === 'status' || message.type === 'completion' || message.type === 'error' || message.type === 'export_status') && onStatusUpdate) {
-      // Handle status updates for translation progress and export status
       if (message.type === 'export_status') {
-        // Handle export-specific status updates
         const status = message.status || 'processing';
         const messageText = message.message || 
           (status === 'export_started' ? 'جاري تصدير الفيديو...' :
@@ -92,21 +82,13 @@ export const useProjectSubtitleUpdates = (
       return;
     }
     
-    // Set active project for WebSocket
     const connectWebSocket = async () => {
-      try {
-        if (!wsManager.isActiveProjectConnected() || wsManager.getActiveProjectId() !== projectId) {
-          console.log(`Connecting WebSocket for project: ${projectId}`);
-          await wsManager.setActiveProject(projectId);
-        }
-      } catch (error) {
-        console.error('Failed to connect WebSocket:', error);
+      if (!wsManager.isActiveProjectConnected() || wsManager.getActiveProjectId() !== projectId) {
+        await wsManager.setActiveProject(projectId);
       }
     };
     
     connectWebSocket();
-    
-    // Listen for WebSocket messages
     wsManager.addEventListener('*', handleWebSocketMessage);
     
     return () => {

@@ -22,18 +22,12 @@ export const useProjectStatusUpdates = (
     
     // Only handle messages for projects that exist in our list
     const project = projects.find(p => p.id === project_id);
-    if (!project) {
-      console.log(`Ignoring message for unknown project: ${project_id}`);
-      return;
-    }
-    
-    console.log('Project status update:', { project_id, type, status, progress, message });
+    if (!project) return;
     
     switch (type) {
       case 'status':
         if (status) {
           const newStatus = status === 'transcribed' ? 'transcribed' : status === 'completed' ? 'completed' : 'processing';
-          console.log(`Updating project ${project_id} status to: ${newStatus}, progress: ${progress}, stage: ${status}`);
           
           // Map backend status to user-friendly Arabic messages
           const stageMessages: Record<string, string> = {
@@ -57,9 +51,7 @@ export const useProjectStatusUpdates = (
         break;
       
       case 'completion':
-        // Project transcription is completed (not yet translated)
         const completionData = message.data || {};
-        console.log(`Project ${project_id} transcription completed with data:`, completionData);
         updateProjectCallback(project_id, {
           status: 'transcribed',
           subtitlesCount: completionData.subtitle_count || 0
@@ -67,32 +59,21 @@ export const useProjectStatusUpdates = (
         break;
       
       case 'error':
-        console.log(`Project ${project_id} failed with error:`, message.message);
         updateProjectCallback(project_id, {
           status: 'error'
         });
-        break;
-        
-      default:
-        console.log(`Unhandled message type: ${type}`);
         break;
     }
   }, [projects, updateProjectCallback]);
 
   useEffect(() => {
-    // Extract project IDs for WebSocket connections
     const projectIds = projects
       .filter(project => project.status === 'processing')
       .map(project => project.id);
     
-    console.log(`Setting up WebSocket connections for processing projects:`, projectIds);
-    
     // Ensure connections to all processing projects
-    wsManager.ensureProjectConnections(projectIds).catch(error => {
-      console.error('Failed to setup WebSocket connections:', error);
-    });
+    wsManager.ensureProjectConnections(projectIds).catch(() => {});
     
-    // Listen for all WebSocket messages
     wsManager.addEventListener('*', handleWebSocketMessage);
     
     return () => {
@@ -112,44 +93,27 @@ export const useProjectPollingFallback = (
   useEffect(() => {
     const processingProjects = projects.filter(p => p.status === 'processing');
     
-    if (processingProjects.length === 0) {
-      return; // No processing projects, no need to poll
-    }
-    
-    console.log(`Starting polling fallback for ${processingProjects.length} processing projects`);
+    if (processingProjects.length === 0) return;
     
     const checkProjectStatus = async () => {
       for (const project of processingProjects) {
-        try {
-          // Fetch latest project data from backend
-          const response = await fetch(`/api/projects/${project.id}`);
-          if (response.ok) {
-            const updatedProject = await response.json();
-            
-            // If status changed, update it
-            if (updatedProject.status !== project.status) {
-              console.log(`Polling detected status change for ${project.id}: ${project.status} -> ${updatedProject.status}`);
-              updateProjectCallback(project.id, {
-                status: updatedProject.status,
-                subtitlesCount: updatedProject.subtitle_count,
-                progress: updatedProject.status === 'completed' ? 100 : project.progress
-              });
-            }
+        const response = await fetch(`/api/projects/${project.id}`);
+        if (response.ok) {
+          const updatedProject = await response.json();
+          if (updatedProject.status !== project.status) {
+            updateProjectCallback(project.id, {
+              status: updatedProject.status,
+              subtitlesCount: updatedProject.subtitle_count,
+              progress: updatedProject.status === 'completed' ? 100 : project.progress
+            });
           }
-        } catch (error) {
-          console.error(`Failed to poll status for project ${project.id}:`, error);
         }
       }
     };
     
-    // Poll every 10 seconds
     const interval = setInterval(checkProjectStatus, 10000);
-    
-    // Also check immediately
     checkProjectStatus();
     
-    return () => {
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [projects, updateProjectCallback]);
 };

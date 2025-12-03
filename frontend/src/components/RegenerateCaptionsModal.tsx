@@ -48,12 +48,10 @@ const RegenerateCaptionsModal: React.FC<RegenerateCaptionsModalProps> = ({
         throw new Error(errorData.detail || 'Failed to regenerate captions');
       }
 
-      const result = await response.json();
-      console.log('Captions regenerated:', result);
+      await response.json();
       onSuccess();
       onClose();
     } catch (err) {
-      console.error('Error regenerating captions:', err);
       if (err instanceof Error) {
         setError(err.message);
       } else {

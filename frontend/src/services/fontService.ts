@@ -13,21 +13,13 @@ export interface FontFamily {
 
 class FontService {
   async getAvailableFonts(): Promise<Font[]> {
-    try {
-      const response = await apiClient.get(API_CONFIG.ENDPOINTS.FONTS);
-      console.log('Font API response:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Font API error:', error);
-      throw error;
-    }
+    const response = await apiClient.get(API_CONFIG.ENDPOINTS.FONTS);
+    return response.data;
   }
 
   // Transform raw font data into grouped font families
   getFontFamilies(fonts: Font[]): FontFamily[] {
-    // Add safety check
     if (!Array.isArray(fonts)) {
-      console.error('getFontFamilies received non-array:', fonts);
       return [];
     }
 

@@ -51,58 +51,40 @@ const HomePageContainer = () => {
     language?: string,
     audioLanguage?: string
   ) => {
-    console.log('handleCreateProject called', { projectData, videoFile, youtubeUrl, resolution, language, audioLanguage });
-    
     setIsCreatingProject(true);
     
-    try {
-      let newProject = null;
+    let newProject = null;
+    const { progress, currentStage, stageMessage, ...cleanProjectData } = projectData;
+    
+    if (videoFile) {
+      newProject = await createProject({
+        ...cleanProjectData,
+        duration: 0
+      } as any, resolution || '720p', videoFile, undefined, language);
       
-      if (videoFile) {
-        console.log('Processing file upload...');
-        const { progress, currentStage, stageMessage, ...cleanProjectData } = projectData;
-        newProject = await createProject({
-          ...cleanProjectData,
-          duration: 0
-        } as any, resolution || '720p', videoFile, undefined, language);
-        
-        console.log('Project created:', newProject);
-        
-        if (newProject) {
-          // Wait 2 seconds to show initial progress, then close
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          setShowCreateModal(false);
-          console.log('File upload started, modal closing, tracking via card');
-        }
-      } else if (youtubeUrl) {
-        console.log('Processing YouTube URL...');
-        const { progress, currentStage, stageMessage, ...cleanProjectData } = projectData;
-        newProject = await createProject({
-          ...cleanProjectData,
-          duration: videoInfo?.duration || 0
-        } as any, resolution || '720p', undefined, videoInfo, language, audioLanguage);
-
-        if (newProject) {
-          // Wait 2 seconds to show initial progress, then close
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          setShowCreateModal(false);
-          console.log('YouTube project created, modal closing, tracking via card');
-        }
-      } else {
-        throw new Error('Either video file or YouTube URL must be provided');
+      if (newProject) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        setShowCreateModal(false);
       }
-    } catch (error) {
-      console.error('Project creation failed:', error);
-      alert(`فشل في إنشاء المشروع: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`);
-    } finally {
-      setIsCreatingProject(false);
+    } else if (youtubeUrl) {
+      newProject = await createProject({
+        ...cleanProjectData,
+        duration: videoInfo?.duration || 0
+      } as any, resolution || '720p', undefined, videoInfo, language, audioLanguage);
+
+      if (newProject) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        setShowCreateModal(false);
+      }
+    } else {
+      throw new Error('Either video file or YouTube URL must be provided');
     }
+    
+    setIsCreatingProject(false);
   };
 
   const handleOpenProject = (project: Project) => {
-    console.log('Opening project:', project);
     if (project.status === 'transcribed' || project.status === 'completed') {
-      // Navigate to project editor page
       navigate(`/${project.id}`);
     } else {
       alert(`المشروع لا يزال قيد المعالجة. الحالة: ${project.status}`);

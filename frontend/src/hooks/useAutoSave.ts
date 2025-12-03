@@ -58,17 +58,14 @@ export const useAutoSave = ({
         text: subtitle.originalText || subtitle.text,
         translation: subtitle.translatedText,
         confidence: subtitle.confidence || 1.0,
-        styling: subtitle.styling  // Include styling information
+        styling: subtitle.styling
       }));
 
       await projectService.updateProjectSubtitles(projectId, backendSubtitles);
       
       lastSavedRef.current = currentHash;
       onSaveComplete?.();
-      
-      console.log(`Auto-saved ${subtitles.length} subtitles for project ${projectId}`);
     } catch (error) {
-      console.error('Auto-save failed:', error);
       onSaveError?.(error);
     } finally {
       isSavingRef.current = false;

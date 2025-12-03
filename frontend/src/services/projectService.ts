@@ -102,8 +102,6 @@ export const projectService = {
     status: string;
     message: string;
   }> {
-  console.log('uploadProjectFile called', { fileName: file.name, projectId, title, description, language });
-    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('project_id', projectId);
@@ -114,8 +112,6 @@ export const projectService = {
     if (language) {
       formData.append('language', language);
     }
-
-    console.log('Making API call to upload endpoint...');
     
     const response = await apiClient.post(API_CONFIG.ENDPOINTS.PROJECTS_UPLOAD, formData, {
       headers: {
@@ -123,7 +119,6 @@ export const projectService = {
       },
     });
     
-    console.log('Upload response:', response.data);
     return response.data;
   },
 
