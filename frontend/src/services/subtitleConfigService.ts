@@ -5,7 +5,7 @@ import apiClient from './apiClient';
 const fallbackConfig: SubtitleConfig = {
   // Basic text properties
   fontSize: '28',
-  fontFamily: 'Cairo',
+  fontFamily: 'Noto Sans Arabic',
   fontWeight: 'Bold',
   
   // Colors

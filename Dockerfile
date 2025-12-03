@@ -19,8 +19,12 @@ RUN apt-get update && apt-get install -y \
     fontconfig \ 
     && rm -rf /var/lib/apt/lists/*
 
-# The source path `./fonts/` is relative to your Docker build context root.
-COPY ./backend/app/assets/fonts/ /usr/share/fonts/truetype/custom/
+# Copy fonts - flatten structure for libass fontsdir compatibility
+# libass fontsdir doesn't recursively load fonts from subdirectories
+COPY ./backend/app/assets/fonts/ /tmp/fonts_source/
+RUN mkdir -p /usr/share/fonts/truetype/custom && \
+    find /tmp/fonts_source -name "*.ttf" -exec cp {} /usr/share/fonts/truetype/custom/ \; && \
+    rm -rf /tmp/fonts_source
 
 # Rebuild the font cache to make the new fonts discoverable by name
 RUN fc-cache -f -v

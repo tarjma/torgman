@@ -130,7 +130,7 @@ class ExportService:
                 output_path,
                 vcodec='libx264',        # H.264 video codec
                 acodec='copy',           # Copy audio without re-encoding
-                preset='medium',         # Balance between speed and quality
+                preset='fast',           # Faster encoding (was 'medium')
                 crf=23                   # Constant rate factor for quality
             )
             .overwrite_output()

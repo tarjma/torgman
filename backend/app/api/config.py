@@ -22,7 +22,7 @@ class CaptionMargin(BaseModel):
 class SubtitleConfig(BaseModel):
     # Basic text properties
     fontSize: Optional[str] = "28"  # Font size in points
-    fontFamily: Optional[str] = "Cairo"
+    fontFamily: Optional[str] = "Noto Sans Arabic"  # Only font verified to work with libass
     fontWeight: Optional[str] = "Bold"
     
     # Colors (hex format)

@@ -7,18 +7,8 @@ from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Font mapping for your available fonts
+# Font mapping for available fonts - Only Noto Sans Arabic works correctly with libass
 FONT_MAPPING = {
-    "Cairo": {
-        "ExtraLight": "Cairo/Cairo-ExtraLight.ttf",
-        "Light": "Cairo/Cairo-Light.ttf",
-        "Regular": "Cairo/Cairo-Regular.ttf", 
-        "Medium": "Cairo/Cairo-Medium.ttf",
-        "SemiBold": "Cairo/Cairo-SemiBold.ttf",
-        "Bold": "Cairo/Cairo-Bold.ttf",
-        "ExtraBold": "Cairo/Cairo-ExtraBold.ttf",
-        "Black": "Cairo/Cairo-Black.ttf"
-    },
     "Noto Sans Arabic": {
         "Thin": "Noto_Sans_Arabic/NotoSansArabic-Thin.ttf",
         "ExtraLight": "Noto_Sans_Arabic/NotoSansArabic-ExtraLight.ttf",
@@ -29,38 +19,6 @@ FONT_MAPPING = {
         "Bold": "Noto_Sans_Arabic/NotoSansArabic-Bold.ttf",
         "ExtraBold": "Noto_Sans_Arabic/NotoSansArabic-ExtraBold.ttf",
         "Black": "Noto_Sans_Arabic/NotoSansArabic-Black.ttf"
-    },
-    "Tajawal": {
-        "ExtraLight": "Tajawal/Tajawal-ExtraLight.ttf",
-        "Light": "Tajawal/Tajawal-Light.ttf",
-        "Regular": "Tajawal/Tajawal-Regular.ttf",
-        "Medium": "Tajawal/Tajawal-Medium.ttf",
-        "Bold": "Tajawal/Tajawal-Bold.ttf",
-        "ExtraBold": "Tajawal/Tajawal-ExtraBold.ttf",
-        "Black": "Tajawal/Tajawal-Black.ttf"
-    },
-    "Rubik": {
-        "Light": "Rubik/Rubik-Light.ttf",
-        "Regular": "Rubik/Rubik-Regular.ttf",
-        "Medium": "Rubik/Rubik-Medium.ttf",
-        "SemiBold": "Rubik/Rubik-SemiBold.ttf",
-        "Bold": "Rubik/Rubik-Bold.ttf",
-        "ExtraBold": "Rubik/Rubik-ExtraBold.ttf",
-        "Black": "Rubik/Rubik-Black.ttf",
-        # Italic variants
-        "LightItalic": "Rubik/Rubik-LightItalic.ttf",
-        "Italic": "Rubik/Rubik-Italic.ttf",
-        "MediumItalic": "Rubik/Rubik-MediumItalic.ttf",
-        "SemiBoldItalic": "Rubik/Rubik-SemiBoldItalic.ttf",
-        "BoldItalic": "Rubik/Rubik-BoldItalic.ttf",
-        "ExtraBoldItalic": "Rubik/Rubik-ExtraBoldItalic.ttf",
-        "BlackItalic": "Rubik/Rubik-BlackItalic.ttf"
-    },
-    "Amiri": {
-        "Regular": "Amiri_Quran/AmiriQuran-Regular.ttf"
-    },
-    "Amiri Quran": {
-        "Regular": "Amiri_Quran/AmiriQuran-Regular.ttf"
     }
 }
 
@@ -299,10 +257,28 @@ def create_ass_content(subtitles: List[CaptionData], style_config: SubtitleConfi
     # Events line format
     events_header = "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
     
+    # Unicode bidi control characters that cause tofu in libass rendering
+    # These should be stripped as libass/HarfBuzz/FriBidi handle RTL automatically
+    BIDI_CONTROL_CHARS = [
+        '\u200B',  # Zero Width Space
+        '\u200C',  # Zero Width Non-Joiner
+        '\u200D',  # Zero Width Joiner
+        '\u200E',  # Left-to-Right Mark
+        '\u200F',  # Right-to-Left Mark
+        '\u202A',  # Left-to-Right Embedding
+        '\u202B',  # Right-to-Left Embedding
+        '\u202C',  # Pop Directional Formatting
+        '\u202D',  # Left-to-Right Override
+        '\u202E',  # Right-to-Left Override
+        '\u2066',  # Left-to-Right Isolate
+        '\u2067',  # Right-to-Left Isolate
+        '\u2068',  # First Strong Isolate
+        '\u2069',  # Pop Directional Isolate
+        '\uFEFF',  # Byte Order Mark / Zero Width No-Break Space
+    ]
+    
     # Create dialogue lines
     dialogue_lines = []
-    RLE = "\u202B"  # Right-to-Left Embedding
-    PDF = "\u202C"  # Pop Directional Formatting
     for sub in subtitles:
         start_time = _to_ass_time(sub.start_time)
         end_time = _to_ass_time(sub.end_time)
@@ -310,10 +286,12 @@ def create_ass_content(subtitles: List[CaptionData], style_config: SubtitleConfi
         # Use translation if available, otherwise use original text
         text = sub.translation if sub.translation else sub.text
         if text:
+            # Strip all Unicode bidi control characters that cause tofu rendering
+            for char in BIDI_CONTROL_CHARS:
+                text = text.replace(char, '')
+            
             # Escape text for ASS format and handle line breaks
-            # Wrap with bidi embedding marks first (they are control chars, not rendered)
-            text_wrapped = f"{RLE}{text}{PDF}"
-            text = text_wrapped.replace('\n', '\\N').replace('{', '\\{').replace('}', '\\}')
+            text = text.replace('\n', '\\N').replace('{', '\\{').replace('}', '\\}')
             dialogue_lines.append(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}")
     
     # Assemble the full ASS file content with fixed PlayRes baseline (1280x720)

@@ -218,6 +218,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return Number.isFinite(n) ? n : 28;
   };
 
+  // Map font weight names to CSS numeric values
+  const fontWeightMap: Record<string, number> = {
+    'ExtraLight': 200,
+    'Light': 300,
+    'Regular': 400,
+    'Medium': 500,
+    'SemiBold': 600,
+    'Bold': 700,
+    'ExtraBold': 800,
+    'Black': 900,
+  };
+
+  const getFontWeight = (weight?: string): number => {
+    if (!weight) return 400;
+    return fontWeightMap[weight] || 400;
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -299,7 +316,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             style={{
               fontFamily: subtitleConfig.fontFamily,
               fontSize: `${computePx(parseFontPx(subtitleConfig.fontSize))}px`,
-              fontWeight: subtitleConfig.fontWeight,
+              fontWeight: getFontWeight(subtitleConfig.fontWeight),
               color: subtitleConfig.color,
               backgroundColor: subtitleConfig.backgroundColor,
               textAlign: 'center',
