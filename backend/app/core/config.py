@@ -51,6 +51,9 @@ class Settings(BaseSettings):
 
     # Optional YouTube cookies file (e.g., exported from browser) to reduce 403 / age restriction issues
     youtube_cookies_file: str | None = None  # Path as string; user can set via environment variable
+    
+    # Optional YouTube PO token for bypassing bot detection (from browser's IndexedDB)
+    youtube_po_token: str | None = None  # Can set via YOUTUBE_PO_TOKEN environment variable
 
 # Create settings instance
 settings = Settings()

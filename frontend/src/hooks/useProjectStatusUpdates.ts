@@ -10,6 +10,7 @@ export interface ProjectProcessingUpdateHandler {
     stageMessage?: string; // Arabic message for stage
     duration?: number;
     subtitlesCount?: number;
+    errorMessage?: string; // Error message from backend
   }): void;
 }
 
@@ -27,7 +28,15 @@ export const useProjectStatusUpdates = (
     switch (type) {
       case 'status':
         if (status) {
-          const newStatus = status === 'transcribed' ? 'transcribed' : status === 'completed' ? 'completed' : 'processing';
+          // Map backend status to frontend status
+          let newStatus: 'processing' | 'transcribed' | 'completed' | 'error' | 'failed' = 'processing';
+          if (status === 'transcribed') {
+            newStatus = 'transcribed';
+          } else if (status === 'completed') {
+            newStatus = 'completed';
+          } else if (status === 'error' || status === 'failed') {
+            newStatus = 'failed';
+          }
           
           // Map backend status to user-friendly Arabic messages
           const stageMessages: Record<string, string> = {
@@ -38,7 +47,9 @@ export const useProjectStatusUpdates = (
             'saving_data': 'جاري حفظ البيانات...',
             'transcribed': 'اكتمل التفريغ بنجاح!',
             'completed': 'اكتملت الترجمة بنجاح!',
-            'processing': 'جاري المعالجة...'
+            'processing': 'جاري المعالجة...',
+            'error': 'فشلت المعالجة',
+            'failed': 'فشلت المعالجة'
           };
           
           updateProjectCallback(project_id, {
@@ -60,7 +71,8 @@ export const useProjectStatusUpdates = (
       
       case 'error':
         updateProjectCallback(project_id, {
-          status: 'error'
+          status: 'failed',
+          errorMessage: message.message || 'فشلت المعالجة'
         });
         break;
     }

@@ -190,16 +190,24 @@ class YouTubeVideoProcessor(BaseVideoProcessor):
             'outtmpl': str(output_path),
             'quiet': True,
             'no_warnings': True,
-            'retries': 5,
-            'fragment_retries': 5,
+            'retries': 10,
+            'fragment_retries': 10,
             'ignoreerrors': False,
             'noplaylist': True,
             'concurrent_fragment_downloads': 1,
+            'extractor_retries': 5,
+            'file_access_retries': 5,
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
+            'sleep_interval_requests': 1,
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
             }
         }
+        
         # Attach cookies file if configured
         if settings.youtube_cookies_file:
             from pathlib import Path as _P
@@ -207,8 +215,43 @@ class YouTubeVideoProcessor(BaseVideoProcessor):
             if cookie_path.exists():
                 ydl_opts['cookiefile'] = str(cookie_path)
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        # Add PO token if configured (helps bypass YouTube bot detection)
+        if settings.youtube_po_token:
+            ydl_opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['web'],
+                    'po_token': [f'web+{settings.youtube_po_token}']
+                }
+            }
+            logger.info("Using PO token for YouTube download")
+        
+        # Try download with multiple fallback strategies
+        download_attempts = [
+            (format_selector, "primary format"),
+            ('best[height<=720]/best', "best quality fallback"),
+            ('18/best', "format 18 fallback"),  # 360p progressive
+        ]
+        
+        last_error = None
+        for fmt, description in download_attempts:
+            try:
+                logger.info(f"Attempting download with {description}: {fmt}")
+                ydl_opts['format'] = fmt
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+                break  # Success, exit loop
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                if '403' in error_str or 'Forbidden' in error_str:
+                    logger.warning(f"Got 403 error with {description}, trying next fallback...")
+                    continue
+                else:
+                    raise  # Non-403 error, don't retry
+        else:
+            # All attempts failed
+            if last_error:
+                raise last_error
         
         # Find the downloaded video file (extension is determined by yt-dlp)
         video_files = list(project_dir.glob(f"{project_id}_video.*"))

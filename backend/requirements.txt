@@ -3,7 +3,7 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 aiosqlite
-yt-dlp>=2024.10.7
+yt-dlp>=2024.12.3
 colorama
 sqlalchemy
 python-multipart

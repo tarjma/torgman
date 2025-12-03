@@ -233,8 +233,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             <p className="text-sm font-medium text-gray-900 mb-2">
               فشلت معالجة المشروع
             </p>
-            <p className="text-xs text-gray-600 mb-4">
-              {project.stageMessage || 'حدث خطأ أثناء المعالجة'}
+            <p className="text-xs text-gray-600 mb-4 line-clamp-3">
+              {project.errorMessage || project.stageMessage || 'حدث خطأ أثناء المعالجة'}
             </p>
             
             {/* Action Buttons */}

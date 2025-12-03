@@ -7,7 +7,6 @@ import CreateProjectModal from '../components/CreateProjectModal';
 
 // Hooks
 import { useProjects } from '../hooks/useProjects';
-import { useVideoProcessor } from '../hooks/useVideoProcessor';
 import { useProjectStatusUpdates, useProjectPollingFallback } from '../hooks/useProjectStatusUpdates';
 
 // Types
@@ -38,10 +37,6 @@ const HomePageContainer = () => {
   // Enable polling fallback for stuck projects
   useProjectPollingFallback(projects, handleProjectUpdate);
 
-  const {
-    progress
-  } = useVideoProcessor();
-
   const handleCreateProject = async (
     projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'userId'>, 
     videoFile?: File, 
@@ -53,33 +48,25 @@ const HomePageContainer = () => {
   ) => {
     setIsCreatingProject(true);
     
-    let newProject = null;
     const { progress, currentStage, stageMessage, ...cleanProjectData } = projectData;
     
     if (videoFile) {
-      newProject = await createProject({
+      await createProject({
         ...cleanProjectData,
         duration: 0
       } as any, resolution || '720p', videoFile, undefined, language);
-      
-      if (newProject) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        setShowCreateModal(false);
-      }
     } else if (youtubeUrl) {
-      newProject = await createProject({
+      await createProject({
         ...cleanProjectData,
         duration: videoInfo?.duration || 0
       } as any, resolution || '720p', undefined, videoInfo, language, audioLanguage);
-
-      if (newProject) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        setShowCreateModal(false);
-      }
     } else {
+      setIsCreatingProject(false);
       throw new Error('Either video file or YouTube URL must be provided');
     }
     
+    // Close modal immediately - progress will show on project card
+    setShowCreateModal(false);
     setIsCreatingProject(false);
   };
 
@@ -111,7 +98,6 @@ const HomePageContainer = () => {
         onClose={() => setShowCreateModal(false)}
         onCreateProject={handleCreateProject}
         isProcessing={isCreatingProject}
-        progress={progress}
       />
     </>
   );

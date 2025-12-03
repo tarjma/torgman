@@ -89,6 +89,7 @@ export interface Project {
   progress?: number; // 0-100, tracks processing progress
   currentStage?: string; // Current processing stage (e.g., "downloading_video", "generating_subtitles")
   stageMessage?: string; // User-friendly Arabic message for current stage
+  errorMessage?: string; // Error message when status is 'error' or 'failed'
   createdAt: Date;
   updatedAt: Date;
   userId: string;

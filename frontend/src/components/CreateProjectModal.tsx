@@ -1,25 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { X, Upload, Youtube, FileVideo, Loader2, CheckCircle, RefreshCw, Info } from 'lucide-react';
+import { X, Upload, Youtube, FileVideo, CheckCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { Project } from '../types';
 import { youtubeService, YouTubeVideoInfo } from '../services/youtubeService';
-import { wsManager } from '../services/websocket';
 import SearchableLanguageSelect, { LANGUAGE_MAP } from './SearchableLanguageSelect';
 
 // Move constants outside component for better performance
 const YOUTUBE_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/;
-
-const RESOLUTION_LABELS: { [key: string]: string } = {
-  '144p': 'جودة منخفضة',
-  '240p': 'جودة منخفضة',
-  '360p': 'جودة متوسطة',
-  '480p': 'جودة متوسطة',
-  '720p': 'جودة عالية',
-  '1080p': 'جودة عالية جداً',
-  '1440p': 'جودة فائقة',
-  '2160p': 'جودة 4K',
-  'best': 'أفضل جودة متاحة',
-  'worst': 'أقل جودة متاحة'
-};
 
 type ProjectType = 'youtube' | 'file';
 
@@ -28,19 +14,16 @@ interface CreateProjectModalProps {
   onClose: () => void;
   onCreateProject: (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'userId'>, videoFile?: File, youtubeUrl?: string, resolution?: string, videoInfo?: YouTubeVideoInfo, language?: string, audioLanguage?: string) => Promise<void>;
   isProcessing: boolean;
-  progress: number;
 }
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   isOpen,
   onClose,
   onCreateProject,
-  isProcessing,
-  progress
+  isProcessing
 }) => {
   const [projectType, setProjectType] = useState<ProjectType>('youtube');
   const [projectTitle, setProjectTitle] = useState('');
-  const [projectDescription, setProjectDescription] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -56,15 +39,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   // Add state for tracking manual title input and validation errors
   const [isTitleManuallySet, setIsTitleManuallySet] = useState(false);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
-  
-  // Track real backend progress
-  const [backendProgress, setBackendProgress] = useState(0);
-  const [backendStage, setBackendStage] = useState('');
 
   const resetForm = useCallback(() => {
     setProjectType('youtube');
     setProjectTitle('');
-    setProjectDescription('');
     setYoutubeUrl('');
     setSelectedFile(null);
     setResolution('720p');
@@ -111,28 +89,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       setAudioLanguage(videoInfo.original_audio_language);
     }
   }, [videoInfo]);
-  
-  // Listen to WebSocket updates during modal processing
-  useEffect(() => {
-    if (!isProcessing) {
-      setBackendProgress(0);
-      setBackendStage('');
-      return;
-    }
-    
-    const handleProgress = (message: any) => {
-      if (message.type === 'status' && message.progress !== undefined) {
-        setBackendProgress(message.progress);
-        setBackendStage(message.status || '');
-      }
-    };
-    
-    wsManager.addEventListener('*', handleProgress);
-    
-    return () => {
-      wsManager.removeEventListener('*', handleProgress);
-    };
-  }, [isProcessing]);
 
   // Manual YouTube info fetching
   const handleFetchYouTubeInfo = useCallback(async () => {
@@ -231,10 +187,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     return [];
   };
 
-  const getResolutionLabel = (res: string): string => {
-    return RESOLUTION_LABELS[res] || 'جودة غير محددة';
-  };
-
   // Validation function
   const validateForm = () => {
     const errors: {[key: string]: string} = {};
@@ -269,7 +221,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     const isYoutube = projectType === 'youtube';
     const projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'userId'> = {
       title: projectTitle.trim(),
-      description: projectDescription.trim() || undefined,
       videoTitle: isYoutube 
         ? videoInfo?.title || 'فيديو يوتيوب'
         : selectedFile?.name.replace(/\.[^/.]+$/, '') || 'فيديو محلي',
@@ -294,150 +245,120 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     } catch (error) {
       console.error('Project creation failed:', error);
     }
-  }, [projectTitle, projectDescription, projectType, selectedFile, youtubeUrl, videoInfo, resolution, projectLanguage, audioLanguage, onCreateProject]);
+  }, [projectTitle, projectType, selectedFile, youtubeUrl, videoInfo, resolution, projectLanguage, audioLanguage, onCreateProject]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" dir="rtl">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" dir="rtl">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-bold text-gray-900">إنشاء مشروع جديد</h2>
+        <div className="flex items-center justify-between p-5 border-b bg-gradient-to-l from-blue-50 to-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+              <FileVideo className="w-5 h-5 text-white" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">مشروع جديد</h2>
+          </div>
           <button
             onClick={handleClose}
             disabled={isProcessing}
-            className="p-2 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Processing State */}
-        {isProcessing && (
-          <div className="p-6 text-center border-b bg-blue-50">
-            <div className="flex items-center justify-center mb-4">
-              <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
-                <Loader2 className="w-6 h-6 text-white animate-spin" />
-              </div>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">جاري معالجة المشروع...</h3>
-            
-            {/* Show stage-specific message */}
-            <p className="text-gray-600 mb-4">
-              {backendStage === 'downloading_video' && 'جاري تحميل الفيديو من يوتيوب...'}
-              {backendStage === 'extracting_audio' && 'جاري استخراج الصوت من الفيديو...'}
-              {backendStage === 'generating_subtitles' && 'جاري توليد الترجمات (قد يستغرق عدة دقائق)...'}
-              {!backendStage && 'يتم تحضير البيانات وبدء المعالجة'}
-            </p>
-            
-            <div className="max-w-xs mx-auto">
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${backendProgress > 0 ? backendProgress : progress}%` }}
-                />
-              </div>
-              <div className="flex justify-between items-center mt-2">
-                <span className="text-sm font-medium text-blue-600">
-                  {backendProgress > 0 ? backendProgress : progress}% مكتمل
-                </span>
-                {(backendProgress >= 100 || progress === 100) && (
-                  <div className="flex items-center gap-1 text-green-600">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">تم بنجاح!</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Note about closing modal */}
-            {backendProgress > 0 && backendProgress < 100 && (
-              <p className="text-xs text-gray-500 mt-3">
-                يمكنك إغلاق هذه النافذة - ستستمر المعالجة في الخلفية
-              </p>
-            )}
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* Project Type Selection */}
-          <div className="space-y-4">
+          <div className="space-y-3">
             <label className="block text-sm font-medium text-gray-700">
-              نوع المشروع *
-            </label>          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setProjectType('youtube')}
-              disabled={isProcessing}
-              className={`p-4 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-2 disabled:opacity-50 ${
-                projectType === 'youtube'
-                  ? 'bg-red-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Youtube className="w-6 h-6" />
-              <span>فيديو يوتيوب</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setProjectType('file')}
-              disabled={isProcessing}
-              className={`p-4 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-2 disabled:opacity-50 ${
-                projectType === 'file'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <FileVideo className="w-6 h-6" />
-              <span>رفع ملف</span>
-            </button>
-          </div>
+              اختر مصدر الفيديو
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setProjectType('youtube')}
+                disabled={isProcessing}
+                className={`group relative p-5 rounded-xl text-sm font-medium transition-all duration-200 flex flex-col items-center gap-3 disabled:opacity-50 border-2 ${
+                  projectType === 'youtube'
+                    ? 'border-red-500 bg-red-50 shadow-lg shadow-red-100'
+                    : 'border-gray-200 bg-white hover:border-red-300 hover:bg-red-50/50'
+                }`}
+              >
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
+                  projectType === 'youtube'
+                    ? 'bg-red-600'
+                    : 'bg-gray-100 group-hover:bg-red-100'
+                }`}>
+                  <Youtube className={`w-6 h-6 ${
+                    projectType === 'youtube' ? 'text-white' : 'text-red-600'
+                  }`} />
+                </div>
+                <span className={projectType === 'youtube' ? 'text-red-700 font-semibold' : 'text-gray-700'}>يوتيوب</span>
+                {projectType === 'youtube' && (
+                  <div className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-3 h-3 text-white" />
+                  </div>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setProjectType('file')}
+                disabled={isProcessing}
+                className={`group relative p-5 rounded-xl text-sm font-medium transition-all duration-200 flex flex-col items-center gap-3 disabled:opacity-50 border-2 ${
+                  projectType === 'file'
+                    ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100'
+                    : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/50'
+                }`}
+              >
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
+                  projectType === 'file'
+                    ? 'bg-blue-600'
+                    : 'bg-gray-100 group-hover:bg-blue-100'
+                }`}>
+                  <Upload className={`w-6 h-6 ${
+                    projectType === 'file' ? 'text-white' : 'text-blue-600'
+                  }`} />
+                </div>
+                <span className={projectType === 'file' ? 'text-blue-700 font-semibold' : 'text-gray-700'}>رفع ملف</span>
+                {projectType === 'file' && (
+                  <div className="absolute -top-2 -right-2 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-3 h-3 text-white" />
+                  </div>
+                )}
+              </button>
+            </div>
           </div>
 
-          {/* Project Details */}
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="project-title" className="block text-sm font-medium text-gray-700 mb-2">
-                اسم المشروع *
-              </label>
-              <input
-                id="project-title"
-                type="text"
-                value={projectTitle}
-                onChange={(e) => {
-                  setProjectTitle(e.target.value);
-                  setIsTitleManuallySet(true);
-                  // Clear validation error when user starts typing
-                  if (validationErrors.title) {
-                    setValidationErrors(prev => ({...prev, title: ''}));
-                  }
-                }}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  validationErrors.title ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="مثال: ترجمة محاضرة التسويق الرقمي"
-                disabled={isProcessing}
-              />
-              {validationErrors.title && (
-                <p className="mt-1 text-sm text-red-600">{validationErrors.title}</p>
-              )}
-            </div>
-            
-            <div>
-              <label htmlFor="project-description" className="block text-sm font-medium text-gray-700 mb-2">
-                وصف المشروع (اختياري)
-              </label>
-              <textarea
-                id="project-description"
-                value={projectDescription}
-                onChange={(e) => setProjectDescription(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                rows={3}
-                placeholder="وصف مختصر عن المشروع..."
-                disabled={isProcessing}
-              />
-            </div>
+          {/* Project Title */}
+          <div>
+            <label htmlFor="project-title" className="block text-sm font-medium text-gray-700 mb-2">
+              اسم المشروع
+            </label>
+            <input
+              id="project-title"
+              type="text"
+              value={projectTitle}
+              onChange={(e) => {
+                setProjectTitle(e.target.value);
+                setIsTitleManuallySet(true);
+                if (validationErrors.title) {
+                  setValidationErrors(prev => ({...prev, title: ''}));
+                }
+              }}
+              className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                validationErrors.title ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+              }`}
+              placeholder="سيتم تعبئته تلقائياً من عنوان الفيديو..."
+              disabled={isProcessing}
+            />
+            {validationErrors.title && (
+              <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
+                <span className="inline-block w-1 h-1 bg-red-500 rounded-full" />
+                {validationErrors.title}
+              </p>
+            )}
           </div>
 
           {/* YouTube URL Section */}
@@ -445,18 +366,19 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             <div className="space-y-4">
               <div className="space-y-2">
                 <label htmlFor="youtube-url" className="block text-sm font-medium text-gray-700">
-                  رابط فيديو يوتيوب *
+                  رابط الفيديو
                 </label>
                 <div className="flex gap-2">
                   <div className="flex-1 relative">
-                    <Youtube className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500 w-5 h-5" />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                      <Youtube className="text-red-600 w-4 h-4" />
+                    </div>
                     <input
                       id="youtube-url"
                       type="url"
                       value={youtubeUrl}
                       onChange={(e) => {
                         setYoutubeUrl(e.target.value);
-                        // Clear validation errors when user starts typing
                         if (validationErrors.youtube) {
                           setValidationErrors(prev => ({...prev, youtube: ''}));
                         }
@@ -464,31 +386,33 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                           setVideoInfoError(null);
                         }
                       }}
-                      className={`w-full pr-10 pl-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent ${
-                        validationErrors.youtube || videoInfoError ? 'border-red-300' : 'border-gray-300'
+                      className={`w-full pr-14 pl-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all ${
+                        validationErrors.youtube || videoInfoError ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                       }`}
-                      placeholder="https://youtube.com/watch?v=..."
+                      placeholder="الصق رابط يوتيوب هنا..."
                       dir="ltr"
                       disabled={isProcessing}
                     />
                   </div>
-                  {/* Manual fetch button - now optional since we auto-fetch */}
                   <button
                     type="button"
                     onClick={handleFetchYouTubeInfo}
                     disabled={isProcessing || isLoadingVideoInfo || !youtubeUrl.trim()}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    className="px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 border-2 border-gray-200"
                     title="إعادة جلب المعلومات"
                   >
                     {isLoadingVideoInfo ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
-                      <RefreshCw className="w-4 h-4" />
+                      <RefreshCw className="w-5 h-5" />
                     )}
                   </button>
                 </div>
                 {validationErrors.youtube && (
-                  <p className="text-red-600 text-sm">{validationErrors.youtube}</p>
+                  <p className="text-sm text-red-600 flex items-center gap-1 mt-1">
+                    <span className="inline-block w-1 h-1 bg-red-500 rounded-full" />
+                    {validationErrors.youtube}
+                  </p>
                 )}
               </div>
 
@@ -499,38 +423,31 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 </div>
               )}
               
-              {/* Video Information Display - Improved single column layout */}
+              {/* Video Information Display */}
               {videoInfo && (
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                  <h4 className="font-medium text-gray-900 text-sm flex items-center gap-2">
-                    <Info className="w-4 h-4" />
-                    معلومات الفيديو:
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="text-gray-600 text-xs">العنوان</span>
-                      <p className="font-medium" title={videoInfo.title}>
+                <div className="bg-gradient-to-l from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 line-clamp-2" title={videoInfo.title}>
                         {videoInfo.title}
                       </p>
+                      <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-gray-600">
+                        <span className="flex items-center gap-1">
+                          🕐 {Math.floor(videoInfo.duration / 60)}:{(videoInfo.duration % 60).toString().padStart(2, '0')}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          📺 {getAvailableResolutions().length - 1} جودة
+                        </span>
+                        {videoInfo.uploader && (
+                          <span className="flex items-center gap-1">
+                            👤 {videoInfo.uploader}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <span className="text-gray-600 text-xs">المدة</span>
-                        <p className="font-medium">
-                          {Math.floor(videoInfo.duration / 60)}:{(videoInfo.duration % 60).toString().padStart(2, '0')} دقيقة
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 text-xs">الجودات المتاحة</span>
-                        <p className="font-medium">{getAvailableResolutions().length - 1} جودة</p>
-                      </div>
-                    </div>
-                    {videoInfo.uploader && (
-                      <div>
-                        <span className="text-gray-600 text-xs">القناة</span>
-                        <p className="font-medium">{videoInfo.uploader}</p>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -538,51 +455,57 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               {/* Video Resolution & Size Selection */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-gray-700">جودة الفيديو</label>
+                  <label className="block text-sm font-medium text-gray-700">جودة التحميل</label>
                   {resolution && videoInfo?.resolution_sizes && (
-                    <span className="text-xs text-gray-600">
-                      الحجم المتوقع: {
+                    <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                      {
                         (resolution === 'best'
                           ? videoInfo.resolution_sizes[0]?.human_size
-                          : videoInfo.resolution_sizes.find(r => r.resolution === resolution)?.human_size) || 'غير متوفر'
+                          : videoInfo.resolution_sizes.find(r => r.resolution === resolution)?.human_size) || ''
                       }
                     </span>
                   )}
                 </div>
                 {getAvailableResolutions().length === 0 && (
-                  <p className="text-xs text-gray-500">ستظهر الجودات المتاحة بعد إدخال رابط صحيح</p>
+                  <div className="text-center py-4 text-gray-500 text-sm bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                    ستظهر الجودات المتاحة بعد إدخال رابط صحيح
+                  </div>
                 )}
                 {getAvailableResolutions().length > 0 && (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     {getAvailableResolutions().map(res => {
                       const sizeObj = videoInfo?.resolution_sizes?.find(r => r.resolution === res) || (res === 'best' ? videoInfo?.resolution_sizes?.[0] : undefined);
                       const isRecommended = videoInfo?.recommended_resolution === res;
+                      const isSelected = resolution === res;
                       return (
                         <button
                           key={res}
                           type="button"
                           disabled={isProcessing}
                           onClick={() => setResolution(res)}
-                          className={`border rounded-lg p-2 text-right transition-colors flex flex-col gap-0.5 ${
-                            resolution === res ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
+                          className={`relative border-2 rounded-xl p-3 text-right transition-all flex flex-col gap-1 ${
+                            isSelected 
+                              ? 'border-blue-500 bg-blue-50 shadow-sm' 
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
                           }`}
                         >
-                          <span className="text-sm font-medium flex items-center gap-1">
-                            {res === 'best' ? 'أفضل جودة' : res === 'worst' ? 'أقل جودة' : res}
-                            {isRecommended && <span className="text-[10px] bg-blue-600 text-white px-1 rounded">موصى</span>}
+                          {isSelected && (
+                            <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
+                              <CheckCircle className="w-2.5 h-2.5 text-white" />
+                            </div>
+                          )}
+                          <span className="text-sm font-semibold flex items-center gap-1.5">
+                            {res === 'best' ? '✨ أفضل' : res === 'worst' ? 'أقل' : res}
+                            {isRecommended && <span className="text-[10px] bg-green-600 text-white px-1.5 py-0.5 rounded-full">موصى</span>}
                           </span>
-                          <span className="text-[11px] text-gray-600">{getResolutionLabel(res)}</span>
                           {sizeObj && (
-                            <span className="text-[11px] text-gray-800 font-semibold">{sizeObj.human_size}</span>
+                            <span className="text-xs text-gray-600">{sizeObj.human_size}</span>
                           )}
                         </button>
                       );
                     })}
                   </div>
                 )}
-                <p className="text-xs text-gray-500">
-                  جودة أعلى = حجم أكبر ووقت تنزيل أطول، لكن وضوح أفضل. اختر ما يناسب احتياجك.
-                </p>
                 {/* Hidden native select for accessibility / fallback */}
                 <select
                   value={resolution}
@@ -600,12 +523,12 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           {projectType === 'file' && (
             <div>
               <div
-                className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
                   dragActive
-                    ? 'border-blue-500 bg-blue-50'
+                    ? 'border-blue-500 bg-blue-50 scale-[1.02]'
                     : validationErrors.file 
                     ? 'border-red-300 bg-red-50'
-                    : 'border-gray-300 hover:border-gray-400'
+                    : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'
                 } ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -613,33 +536,43 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 onDrop={handleDrop}
               >
                 <div className="space-y-4">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-                    <Upload className="w-6 h-6 text-blue-600" />
-                  </div>
-                  
                   {selectedFile ? (
-                    <div className="space-y-2">
-                      <p className="font-medium text-gray-900">{selectedFile.name}</p>
-                      <p className="text-sm text-gray-600">
-                        {(selectedFile.size / (1024 * 1024)).toFixed(1)} ميجابايت
-                      </p>
+                    <div className="space-y-3">
+                      <div className="w-16 h-16 bg-gradient-to-br from-green-100 to-emerald-100 rounded-2xl flex items-center justify-center mx-auto">
+                        <FileVideo className="w-8 h-8 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 text-lg">{selectedFile.name}</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          📁 {(selectedFile.size / (1024 * 1024)).toFixed(1)} ميجابايت
+                        </p>
+                      </div>
                       {!isProcessing && (
                         <button
                           type="button"
                           onClick={() => setSelectedFile(null)}
-                          className="text-red-600 hover:underline text-sm"
+                          className="text-red-600 hover:text-red-700 text-sm font-medium bg-red-50 px-4 py-2 rounded-lg hover:bg-red-100 transition-colors"
                         >
-                          إزالة الملف
+                          ✕ إزالة الملف
                         </button>
                       )}
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <p className="text-gray-900 font-medium">اسحب وأفلت ملف الفيديو هنا</p>
-                      <p className="text-gray-600">أو انقر للاختيار من جهازك</p>
-                      <p className="text-xs text-gray-500">
-                        الصيغ المدعومة: MP4, AVI, MOV, MKV (حد أقصى 500 ميجابايت)
-                      </p>
+                    <div className="space-y-3">
+                      <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl flex items-center justify-center mx-auto">
+                        <Upload className="w-8 h-8 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-gray-900 font-semibold text-lg">اسحب وأفلت الفيديو هنا</p>
+                        <p className="text-gray-500 mt-1">أو انقر للاختيار</p>
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
+                        <span className="bg-gray-100 px-2 py-1 rounded">MP4</span>
+                        <span className="bg-gray-100 px-2 py-1 rounded">AVI</span>
+                        <span className="bg-gray-100 px-2 py-1 rounded">MOV</span>
+                        <span className="bg-gray-100 px-2 py-1 rounded">MKV</span>
+                        <span className="bg-gray-100 px-2 py-1 rounded">حتى 500MB</span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -653,7 +586,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 />
               </div>
               {validationErrors.file && (
-                <p className="mt-2 text-sm text-red-600">{validationErrors.file}</p>
+                <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
+                  <span className="inline-block w-1 h-1 bg-red-500 rounded-full" />
+                  {validationErrors.file}
+                </p>
               )}
             </div>
           )}
@@ -705,33 +641,30 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           )}
 
           {/* Actions */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-6 border-t border-gray-100">
             <button
               type="button"
               onClick={handleClose}
               disabled={isProcessing}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-3 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all font-medium disabled:opacity-50"
             >
               إلغاء
             </button>
             <button
               type="submit"
               disabled={isProcessing}
-              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-              title={
-                !projectTitle.trim() ? 'يرجى إدخال اسم المشروع' :
-                projectType === 'file' && !selectedFile ? 'يرجى اختيار ملف فيديو' :
-                projectType === 'youtube' && !youtubeUrl.trim() ? 'يرجى إدخال رابط يوتيوب' :
-                ''
-              }
+              className="flex-1 bg-gradient-to-l from-blue-600 to-blue-700 text-white px-4 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 font-semibold shadow-lg shadow-blue-200"
             >
               {isProcessing ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
                   جاري الإنشاء...
                 </>
               ) : (
-                'إنشاء المشروع'
+                <>
+                  إنشاء المشروع
+                  <span className="text-blue-200">←</span>
+                </>
               )}
             </button>
           </div>

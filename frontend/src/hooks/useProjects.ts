@@ -79,6 +79,9 @@ export const useProjects = (userId?: string) => {
     if (projectData.videoUrl) {
       const videoInfo = preFetchedVideoInfo || await youtubeService.getVideoInfo(projectData.videoUrl);
       
+      // Connect WebSocket BEFORE starting processing to receive all status updates
+      await wsManager.connect(projectId);
+      
       await youtubeService.processVideo({
         url: projectData.videoUrl,
         project_id: projectId,
@@ -87,8 +90,6 @@ export const useProjects = (userId?: string) => {
         language,
         audio_language: audioLanguage
       });
-
-      await wsManager.connect(projectId);
       
       const newProject: Project = {
         ...projectData,
@@ -102,9 +103,12 @@ export const useProjects = (userId?: string) => {
         updatedAt: new Date()
       };
 
-      setProjects(prev => [...prev, newProject]);
+      setProjects(prev => [newProject, ...prev]);
       return { ...newProject, status: 'processing' };
     } else if (videoFile) {
+      // Connect WebSocket BEFORE starting processing to receive all status updates
+      await wsManager.connect(projectId);
+      
       await projectService.uploadProjectFile(
         videoFile,
         projectId,
@@ -112,8 +116,6 @@ export const useProjects = (userId?: string) => {
         projectData.description,
         language
       );
-      
-      await wsManager.connect(projectId);
       
       const newProject: Project = {
         ...projectData,
@@ -124,7 +126,7 @@ export const useProjects = (userId?: string) => {
         updatedAt: new Date()
       };
 
-      setProjects(prev => [...prev, newProject]);
+      setProjects(prev => [newProject, ...prev]);
       return { ...newProject, status: 'processing' };
     } else {
       throw new Error('Either video URL or video file must be provided');
