@@ -10,8 +10,8 @@ import {themes as prismThemes} from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'My Site',
-  tagline: 'Dinosaurs are cool',
+  title: 'Torgman',
+  tagline: 'A central hub for any translation project',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -20,14 +20,14 @@ const config = {
   },
 
   // Set the production url of your site here
-  url: 'https://tarjma.github.io',
+  url: 'https://MohamedAliRashad.github.io',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/torgman/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'tarjma', // Usually your GitHub org/user name.
+  organizationName: 'MohamedAliRashad', // Usually your GitHub org/user name.
   projectName: 'torgman', // Usually your repo name.
 
   onBrokenLinks: 'throw',
@@ -50,7 +50,7 @@ const config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/tarjma/torgman/tree/main/docs/',
+            'https://github.com/MohamedAliRashad/torgman/tree/main/docs/',
         },
         blog: {
           showReadingTime: true,
@@ -61,7 +61,7 @@ const config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/tarjma/torgman/tree/main/docs/',
+            'https://github.com/MohamedAliRashad/torgman/tree/main/docs/',
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
@@ -83,9 +83,9 @@ const config = {
         respectPrefersColorScheme: true,
       },
       navbar: {
-        title: 'My Site',
+        title: 'Torgman',
         logo: {
-          alt: 'My Site Logo',
+          alt: 'Torgman Logo',
           src: 'img/logo.svg',
         },
         items: [
@@ -93,11 +93,11 @@ const config = {
             type: 'docSidebar',
             sidebarId: 'tutorialSidebar',
             position: 'left',
-            label: 'Tutorial',
+            label: 'Docs',
           },
           {to: '/blog', label: 'Blog', position: 'left'},
           {
-            href: 'https://github.com/tarjma/torgman',
+            href: 'https://github.com/MohamedAliRashad/torgman',
             label: 'GitHub',
             position: 'right',
           },
@@ -110,7 +110,7 @@ const config = {
             title: 'Docs',
             items: [
               {
-                label: 'Tutorial',
+                label: 'Getting Started',
                 to: '/docs/intro',
               },
             ],
@@ -119,16 +119,12 @@ const config = {
             title: 'Community',
             items: [
               {
-                label: 'Stack Overflow',
-                href: 'https://stackoverflow.com/questions/tagged/docusaurus',
+                label: 'GitHub Discussions',
+                href: 'https://github.com/MohamedAliRashad/torgman/discussions',
               },
               {
-                label: 'Discord',
-                href: 'https://discordapp.com/invite/docusaurus',
-              },
-              {
-                label: 'X',
-                href: 'https://x.com/docusaurus',
+                label: 'Issues',
+                href: 'https://github.com/MohamedAliRashad/torgman/issues',
               },
             ],
           },
@@ -141,12 +137,12 @@ const config = {
               },
               {
                 label: 'GitHub',
-                href: 'https://github.com/tarjma/torgman',
+                href: 'https://github.com/MohamedAliRashad/torgman',
               },
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+        copyright: `Copyright © ${new Date().getFullYear()} Torgman. Built with Docusaurus.`,
       },
       prism: {
         theme: prismThemes.github,

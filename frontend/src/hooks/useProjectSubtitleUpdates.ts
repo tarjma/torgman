@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react';
-import { webSocketService, WebSocketMessage } from '../services/webSocketService';
+import { wsManager } from '../services/websocket';
+import { WebSocketMessage } from '../types/websocket';
 import { Subtitle } from '../types';
 
 export interface SubtitleUpdateHandler {
@@ -86,17 +87,17 @@ export const useProjectSubtitleUpdates = (
 
   useEffect(() => {
     if (!projectId) {
-      // Disconnect WebSocket when no project is active
-      webSocketService.disconnect();
+      // Clear active project when no project is active
+      wsManager.clearActiveProject();
       return;
     }
     
-    // Connect to WebSocket for this project
+    // Set active project for WebSocket
     const connectWebSocket = async () => {
       try {
-        if (!webSocketService.isConnected() || webSocketService.getProjectId() !== projectId) {
+        if (!wsManager.isActiveProjectConnected() || wsManager.getActiveProjectId() !== projectId) {
           console.log(`Connecting WebSocket for project: ${projectId}`);
-          await webSocketService.connect(projectId);
+          await wsManager.setActiveProject(projectId);
         }
       } catch (error) {
         console.error('Failed to connect WebSocket:', error);
@@ -106,10 +107,10 @@ export const useProjectSubtitleUpdates = (
     connectWebSocket();
     
     // Listen for WebSocket messages
-    webSocketService.addEventListener('*', handleWebSocketMessage);
+    wsManager.addEventListener('*', handleWebSocketMessage);
     
     return () => {
-      webSocketService.removeEventListener('*', handleWebSocketMessage);
+      wsManager.removeEventListener('*', handleWebSocketMessage);
     };
   }, [handleWebSocketMessage, projectId]);
 };

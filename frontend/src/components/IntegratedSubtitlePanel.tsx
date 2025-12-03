@@ -210,14 +210,14 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
       
       // Ensure WebSocket connection before starting translation
       try {
-        const { webSocketService } = await import('../services/webSocketService');
+        const { wsManager } = await import('../services/websocket');
         
         // Check connection health first
-        if (!webSocketService.checkConnectionHealth()) {
+        if (!wsManager.checkConnectionHealth()) {
           console.log('WebSocket connection is not healthy, reconnecting...');
-          await webSocketService.forceReconnect();
+          await wsManager.forceReconnect();
         } else {
-          await webSocketService.ensureConnection();
+          await wsManager.ensureActiveConnection();
         }
         
         console.log('WebSocket connection verified before translation');

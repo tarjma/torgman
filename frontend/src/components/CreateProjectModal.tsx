@@ -2,7 +2,8 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { X, Upload, Youtube, FileVideo, Loader2, CheckCircle, RefreshCw, Info } from 'lucide-react';
 import { Project } from '../types';
 import { youtubeService, YouTubeVideoInfo } from '../services/youtubeService';
-import { globalWebSocketService } from '../services/globalWebSocketService';
+import { wsManager } from '../services/websocket';
+import SearchableLanguageSelect, { LANGUAGE_MAP } from './SearchableLanguageSelect';
 
 // Move constants outside component for better performance
 const YOUTUBE_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/;
@@ -126,10 +127,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       }
     };
     
-    globalWebSocketService.addEventListener('*', handleProgress);
+    wsManager.addEventListener('*', handleProgress);
     
     return () => {
-      globalWebSocketService.removeEventListener('*', handleProgress);
+      wsManager.removeEventListener('*', handleProgress);
     };
   }, [isProcessing]);
 
@@ -662,29 +663,12 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             <label className="block text-sm font-medium text-gray-700">
               لغة التفريغ النصي
             </label>
-            <select
+            <SearchableLanguageSelect
               value={projectLanguage}
-              onChange={(e) => setProjectLanguage(e.target.value)}
+              onChange={setProjectLanguage}
               disabled={isProcessing}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-            >
-              <option value="auto">كشف تلقائي</option>
-              <option value="ar">العربية</option>
-              <option value="en">English</option>
-              <option value="es">Español</option>
-              <option value="fr">Français</option>
-              <option value="de">Deutsch</option>
-              <option value="it">Italiano</option>
-              <option value="pt">Português</option>
-              <option value="ru">Русский</option>
-              <option value="ja">日本語</option>
-              <option value="ko">한국어</option>
-              <option value="zh">中文</option>
-              <option value="hi">हिन्दी</option>
-              <option value="tr">Türkçe</option>
-              <option value="pl">Polski</option>
-              <option value="nl">Nederlands</option>
-            </select>
+              includeAuto={true}
+            />
             <p className="text-xs text-gray-500">
               اختر لغة الفيديو للتفريغ النصي أو استخدم الكشف التلقائي
             </p>
@@ -704,32 +688,12 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               >
                 {videoInfo.available_audio_languages.map((lang) => {
                   const isOriginal = lang === videoInfo.original_audio_language || lang.startsWith(videoInfo.original_audio_language || '');
-                  const getLanguageName = (code: string) => {
-                    const langMap: { [key: string]: string } = {
-                      'ar': 'العربية',
-                      'en': 'English',
-                      'es': 'Español',
-                      'fr': 'Français',
-                      'de': 'Deutsch',
-                      'it': 'Italiano',
-                      'pt': 'Português',
-                      'ru': 'Русский',
-                      'ja': '日本語',
-                      'ko': '한국어',
-                      'zh': '中文',
-                      'hi': 'हिन्दी',
-                      'tr': 'Türkçe',
-                      'pl': 'Polski',
-                      'nl': 'Nederlands'
-                    };
-                    // Check for exact match or language prefix (e.g., 'en-US' -> 'en')
-                    const baseCode = code.split('-')[0];
-                    return langMap[code] || langMap[baseCode] || code;
-                  };
+                  const baseCode = lang.split('-')[0];
+                  const langName = LANGUAGE_MAP[lang] || LANGUAGE_MAP[baseCode] || lang;
                   
                   return (
                     <option key={lang} value={lang}>
-                      {getLanguageName(lang)}{isOriginal ? ' (اللغة الأصلية)' : ''}
+                      {langName}{isOriginal ? ' (اللغة الأصلية)' : ''}
                     </option>
                   );
                 })}

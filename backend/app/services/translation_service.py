@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ..core.config import settings
 from ..models import CaptionData
+from ..utils.text_utils import format_multiline_caption as _format_multiline_caption
 
 logger = logging.getLogger(__name__)
 
@@ -52,40 +53,9 @@ class TranslationGenerator:
     def format_multiline_caption(self, text: str) -> List[str]:
         """
         Formats text into one or two lines, prioritizing an inverted pyramid shape.
+        Delegates to shared utility function.
         """
-        if len(text) <= self.max_chars_per_line:
-            return [text]
-
-        words = text.split()
-        possible_splits = []
-        for i in range(1, len(words)):
-            line1 = " ".join(words[:i])
-            line2 = " ".join(words[i:])
-            if len(line1) <= self.max_chars_per_line and len(line2) <= self.max_chars_per_line:
-                possible_splits.append((line1, line2))
-
-        if not possible_splits:
-            # Fallback if no valid split found, do a hard wrap
-            mid_point = text.rfind(' ', 0, self.max_chars_per_line)
-            if mid_point == -1:
-                return [text[:self.max_chars_per_line], text[self.max_chars_per_line:].strip()]
-            return [text[:mid_point], text[mid_point:].strip()]
-
-        # **CRITICAL BUG FIX**: Score splits to prefer inverted pyramids
-        best_split = None
-        # Score is a tuple: (is_top_heavy, length_difference). Lower is better.
-        best_score = (True, float('inf')) 
-
-        for line1, line2 in possible_splits:
-            is_top_heavy = len(line1) > len(line2)
-            length_difference = abs(len(line1) - len(line2))
-            score = (is_top_heavy, length_difference)
-            
-            if score < best_score:
-                best_score = score
-                best_split = (line1, line2)
-                
-        return list(best_split)
+        return _format_multiline_caption(text, self.max_chars_per_line)
     
     def translate_caption(self, caption: str, source_language: str = "en", target_language: str = "ar") -> str:
         """Translate a single caption using Google Gemini (synchronous)."""

@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
 // Pages
 import HomePageContainer from './pages/HomePage';
-import ProjectEditorPage from './pages/ProjectEditorPage';
+import ProjectEditorPage from './pages/ProjectEditor';
 
 function App() {
   return (

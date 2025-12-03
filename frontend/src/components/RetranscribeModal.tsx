@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, RefreshCw, Loader2, Languages } from 'lucide-react';
+import SearchableLanguageSelect, { getLanguageName } from './SearchableLanguageSelect';
 
 interface RetranscribeModalProps {
   isOpen: boolean;
@@ -74,29 +75,12 @@ const RetranscribeModal: React.FC<RetranscribeModalProps> = ({
             <label className="block text-sm font-medium text-gray-700">
               اختر لغة الفيديو *
             </label>
-            <select
+            <SearchableLanguageSelect
               value={selectedLanguage}
-              onChange={(e) => setSelectedLanguage(e.target.value)}
+              onChange={setSelectedLanguage}
               disabled={isProcessing}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-            >
-              <option value="auto">كشف تلقائي</option>
-              <option value="ar">العربية</option>
-              <option value="en">English</option>
-              <option value="es">Español</option>
-              <option value="fr">Français</option>
-              <option value="de">Deutsch</option>
-              <option value="it">Italiano</option>
-              <option value="pt">Português</option>
-              <option value="ru">Русский</option>
-              <option value="ja">日本語</option>
-              <option value="ko">한국어</option>
-              <option value="zh">中文</option>
-              <option value="hi">हिन्दी</option>
-              <option value="tr">Türkçe</option>
-              <option value="pl">Polski</option>
-              <option value="nl">Nederlands</option>
-            </select>
+              includeAuto={true}
+            />
             <p className="text-xs text-gray-500">
               سيتم تحليل الصوت من جديد وإنشاء ترجمات جديدة بناءً على اللغة المختارة
             </p>
@@ -143,27 +127,5 @@ const RetranscribeModal: React.FC<RetranscribeModalProps> = ({
     </div>
   );
 };
-
-// Helper function to get language display name
-function getLanguageName(code: string): string {
-  const languages: { [key: string]: string } = {
-    'ar': 'العربية',
-    'en': 'English',
-    'es': 'Español',
-    'fr': 'Français',
-    'de': 'Deutsch',
-    'it': 'Italiano',
-    'pt': 'Português',
-    'ru': 'Русский',
-    'ja': '日本語',
-    'ko': '한국어',
-    'zh': '中文',
-    'hi': 'हिन्दी',
-    'tr': 'Türkçe',
-    'pl': 'Polski',
-    'nl': 'Nederlands'
-  };
-  return languages[code] || code;
-}
 
 export default RetranscribeModal;

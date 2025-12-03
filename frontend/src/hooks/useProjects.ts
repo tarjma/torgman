@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { projectService, ProjectData } from '../services/projectService';
 import { youtubeService } from '../services/youtubeService';
-import { globalWebSocketService } from '../services/globalWebSocketService';
+import { wsManager } from '../services/websocket';
 
 // Map backend ProjectData to frontend Project type
 interface Project extends Omit<ProjectData, 'youtube_url' | 'subtitle_count'> {
@@ -108,7 +108,7 @@ export const useProjects = (userId?: string) => {
         });
 
         // Connect to WebSocket for real-time updates
-        await globalWebSocketService.connectToProject(projectId);
+        await wsManager.connect(projectId);
         
         const newProject: Project = {
           ...projectData,
@@ -141,7 +141,7 @@ export const useProjects = (userId?: string) => {
         console.log('File uploaded successfully');
         
         // Connect to WebSocket for real-time updates
-        await globalWebSocketService.connectToProject(projectId);
+        await wsManager.connect(projectId);
         
         console.log('WebSocket connected');
         

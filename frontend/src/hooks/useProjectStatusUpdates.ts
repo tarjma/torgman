@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { globalWebSocketService } from '../services/globalWebSocketService';
+import { wsManager } from '../services/websocket';
 import { WebSocketMessage } from '../types/websocket';
 
 export interface ProjectProcessingUpdateHandler {
@@ -88,15 +88,15 @@ export const useProjectStatusUpdates = (
     console.log(`Setting up WebSocket connections for processing projects:`, projectIds);
     
     // Ensure connections to all processing projects
-    globalWebSocketService.ensureProjectConnections(projectIds).catch(error => {
+    wsManager.ensureProjectConnections(projectIds).catch(error => {
       console.error('Failed to setup WebSocket connections:', error);
     });
     
     // Listen for all WebSocket messages
-    globalWebSocketService.addEventListener('*', handleWebSocketMessage);
+    wsManager.addEventListener('*', handleWebSocketMessage);
     
     return () => {
-      globalWebSocketService.removeEventListener('*', handleWebSocketMessage);
+      wsManager.removeEventListener('*', handleWebSocketMessage);
     };
   }, [handleWebSocketMessage, projects]);
 };
