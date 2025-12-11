@@ -243,7 +243,9 @@ def create_ass_content(subtitles: List[CaptionData], style_config: SubtitleConfi
     style_header = "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding"
     
     # Create the main style with all ASS fields - use font_name instead of font_path
-    main_style = f"Style: Default,{font_name},{ass_font_size},{primary_color},{secondary_color},{outline_color},{back_color},{bold},{italic},{underline},{strikeout},{scale_x},{scale_y},{spacing},{angle},{border_style},{outline},{shadow},{alignment},{margin_left},{margin_right},{margin_vertical},1"
+    # Encoding=-1 enables libass bidi autodetection mode for proper RTL Arabic/Hebrew support
+    # This triggers autodetection of base direction for each line and ensures RTL text renders correctly
+    main_style = f"Style: Default,{font_name},{ass_font_size},{primary_color},{secondary_color},{outline_color},{back_color},{bold},{italic},{underline},{strikeout},{scale_x},{scale_y},{spacing},{angle},{border_style},{outline},{shadow},{alignment},{margin_left},{margin_right},{margin_vertical},-1"
     
     # Log the generated style for debugging
     logger.info(f"Generated ASS style: {main_style}")
@@ -277,6 +279,22 @@ def create_ass_content(subtitles: List[CaptionData], style_config: SubtitleConfi
         '\uFEFF',  # Byte Order Mark / Zero Width No-Break Space
     ]
     
+    def contains_arabic(text: str) -> bool:
+        """Check if text contains Arabic characters"""
+        for char in text:
+            # Arabic Unicode blocks
+            if '\u0600' <= char <= '\u06FF':  # Arabic
+                return True
+            if '\u0750' <= char <= '\u077F':  # Arabic Supplement
+                return True
+            if '\u08A0' <= char <= '\u08FF':  # Arabic Extended-A
+                return True
+            if '\uFB50' <= char <= '\uFDFF':  # Arabic Presentation Forms-A
+                return True
+            if '\uFE70' <= char <= '\uFEFF':  # Arabic Presentation Forms-B
+                return True
+        return False
+    
     # Create dialogue lines
     dialogue_lines = []
     for sub in subtitles:
@@ -290,8 +308,24 @@ def create_ass_content(subtitles: List[CaptionData], style_config: SubtitleConfi
             for char in BIDI_CONTROL_CHARS:
                 text = text.replace(char, '')
             
+            # For Arabic/RTL text, add RLM (Right-to-Left Mark) before leading punctuation
+            # and after trailing punctuation to fix direction issues with neutral characters
+            # This must be done BEFORE escaping for ASS format
+            if contains_arabic(text):
+                # Define punctuation and neutral characters that need RTL anchoring
+                rtl_neutral_chars = '.,;:!?،؛؟…"\'-()[]{}«»'
+                
+                # Add RLM before any leading neutral characters
+                if text and text[0] in rtl_neutral_chars:
+                    text = '\u200F' + text
+                
+                # Add RLM after any trailing neutral characters  
+                if text and text[-1] in rtl_neutral_chars:
+                    text = text + '\u200F'
+            
             # Escape text for ASS format and handle line breaks
             text = text.replace('\n', '\\N').replace('{', '\\{').replace('}', '\\}')
+            
             dialogue_lines.append(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}")
     
     # Assemble the full ASS file content with fixed PlayRes baseline (1280x720)
