@@ -3,7 +3,7 @@
  * Extracts the complex state management from ProjectEditorPage
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 // Hooks
@@ -58,10 +58,18 @@ export interface UseProjectEditorReturn {
   exportStatus: ExportStatus | null;
   videoInfo: VideoInfo | null;
   
-  // Subtitle state
+  // Subtitle state (source language)
   subtitles: Subtitle[];
   activeSubtitle: string | null;
   currentTime: number;
+  
+  // Arabic subtitle state (independent track)
+  arabicSubtitles: Subtitle[];
+  activeTrack: 'source' | 'arabic' | 'both';
+  setActiveTrack: (track: 'source' | 'arabic' | 'both') => void;
+  setArabicSubtitles: (subtitles: Subtitle[]) => void;
+  updateArabicSubtitle: (id: string, updates: Partial<Subtitle>) => void;
+  deleteArabicSubtitle: (id: string) => void;
   
   // Subtitle config
   subtitleConfig: Record<string, unknown> | null;
@@ -91,6 +99,7 @@ export interface UseProjectEditorReturn {
   handleRetranscribe: (language: string) => Promise<void>;
   handleSeekToSubtitle: (startTime: number, subtitleId: string) => void;
   handleRegenerateCaptionsSuccess: () => Promise<void>;
+  refreshSubtitles: () => Promise<void>;
   handleExportSubtitles: () => void;
   handleExportVideo: () => Promise<void>;
   handleTimeUpdate: (time: number) => void;
@@ -149,6 +158,9 @@ export function useProjectEditor(): UseProjectEditorReturn {
   // Validate that the projectId parameter is actually a project (starts with "project_")
   const projectId = paramProjectId?.startsWith('project_') ? paramProjectId : null;
 
+  // Track if initial load is complete to prevent redirect on subsequent updates
+  const initialLoadCompleteRef = useRef(false);
+
   // Local state
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [showRegenerateCaptions, setShowRegenerateCaptions] = useState(false);
@@ -158,6 +170,22 @@ export function useProjectEditor(): UseProjectEditorReturn {
   const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
   const [project, setProject] = useState<Record<string, unknown> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Caption track state (source = original language, arabic = translated, both = dual display)
+  const [activeTrack, setActiveTrack] = useState<'source' | 'arabic' | 'both'>('source');
+  const [arabicSubtitles, setArabicSubtitles] = useState<Subtitle[]>([]);
+
+  // Function to update a single Arabic subtitle
+  const updateArabicSubtitle = useCallback((id: string, updates: Partial<Subtitle>) => {
+    setArabicSubtitles(prev => 
+      prev.map(sub => sub.id === id ? { ...sub, ...updates } : sub)
+    );
+  }, []);
+
+  // Function to delete an Arabic subtitle
+  const deleteArabicSubtitle = useCallback((id: string) => {
+    setArabicSubtitles(prev => prev.filter(sub => sub.id !== id));
+  }, []);
 
   // Projects management
   const defaultUserId = 'local-user';
@@ -245,6 +273,16 @@ export function useProjectEditor(): UseProjectEditorReturn {
         return;
       }
 
+      // Skip status validation after initial load to prevent redirect during caption generation
+      if (initialLoadCompleteRef.current) {
+        // Just update the project reference if it exists
+        const foundProject = projects.find((p) => p.id === projectId);
+        if (foundProject) {
+          setProject(foundProject as unknown as Record<string, unknown>);
+        }
+        return;
+      }
+
       try {
         setIsLoading(true);
 
@@ -259,10 +297,11 @@ export function useProjectEditor(): UseProjectEditorReturn {
           }
         }
 
+        // Allow access to projects that have completed processing (words extracted or beyond)
+        const accessibleStatuses = ['words_ready', 'captions_generated', 'translated', 'transcribed', 'completed'];
         if (
           foundProject &&
-          foundProject.status !== 'transcribed' &&
-          foundProject.status !== 'completed'
+          !accessibleStatuses.includes(foundProject.status)
         ) {
           alert(`المشروع لا يزال قيد المعالجة. الحالة: ${foundProject.status}`);
           navigate('/');
@@ -271,10 +310,19 @@ export function useProjectEditor(): UseProjectEditorReturn {
 
         setProject(foundProject as unknown as Record<string, unknown>);
 
-        // Load subtitles from backend
+        // Load source subtitles from backend
         const backendSubtitles = await projectService.getProjectSubtitles(projectId);
         const frontendSubtitles = convertBackendSubtitles(backendSubtitles, projectId);
         loadSubtitles(frontendSubtitles);
+        
+        // Load Arabic subtitles (independent track) if available
+        const backendArabicSubtitles = await projectService.getArabicSubtitles(projectId);
+        if (backendArabicSubtitles.length > 0) {
+          const frontendArabicSubtitles = convertBackendSubtitles(backendArabicSubtitles, projectId + '-ar');
+          setArabicSubtitles(frontendArabicSubtitles);
+          // If Arabic subtitles exist, default to showing Arabic track
+          setActiveTrack('arabic');
+        }
 
         // Get source language from project (may be on the extended project data)
         const projectAny = foundProject as Record<string, unknown> | undefined;
@@ -311,6 +359,9 @@ export function useProjectEditor(): UseProjectEditorReturn {
             console.error('Failed to load video:', error);
           }
         }
+        
+        // Mark initial load as complete to prevent status-based redirects on updates
+        initialLoadCompleteRef.current = true;
       } catch (error) {
         console.error('Error loading project:', error);
         alert('فشل في تحميل المشروع. يرجى المحاولة مرة أخرى.');
@@ -323,10 +374,11 @@ export function useProjectEditor(): UseProjectEditorReturn {
     loadProject();
   }, [projectId, projects, projectsLoading, navigate, loadSubtitles, setVideoInfo]);
 
-  // Auto-save functionality
+  // Auto-save functionality (handles both source and Arabic subtitles)
   const { triggerAutoSave, saveNow } = useAutoSave({
     projectId,
     subtitles,
+    arabicSubtitles,
     onSaveStart: () => setIsAutoSaving(true),
     onSaveComplete: () => setTimeout(() => setIsAutoSaving(false), 1000),
     onSaveError: (error) => {
@@ -395,6 +447,25 @@ export function useProjectEditor(): UseProjectEditorReturn {
     alert('تم إعادة إنشاء الترجمات بنجاح!');
   }, [projectId, loadSubtitles]);
 
+  // Refresh subtitles from backend (used after caption generation/translation)
+  const refreshSubtitles = useCallback(async () => {
+    if (!projectId) return;
+
+    // Refresh source subtitles
+    const backendSubtitles = await projectService.getProjectSubtitles(projectId);
+    const frontendSubtitles = convertBackendSubtitles(backendSubtitles, projectId);
+    loadSubtitles(frontendSubtitles);
+
+    // Refresh Arabic subtitles (if they exist)
+    try {
+      const arabicCaptions = await projectService.getArabicSubtitles(projectId);
+      const frontendArabicSubtitles = convertBackendSubtitles(arabicCaptions, projectId);
+      setArabicSubtitles(frontendArabicSubtitles);
+    } catch {
+      // Arabic subtitles may not exist yet, which is fine
+    }
+  }, [projectId, loadSubtitles]);
+
   const handleExportSubtitles = useCallback(() => {
     if (subtitles.length === 0) {
       alert('لا توجد ترجمات للتصدير');
@@ -428,21 +499,27 @@ export function useProjectEditor(): UseProjectEditorReturn {
       return;
     }
 
+    // Determine which track to export
+    const trackToExport = activeTrack === 'both' ? 'source' : activeTrack;
+    const trackLabel = trackToExport === 'arabic' ? 'الترجمة العربية' : 'الترجمة الأصلية';
+
     const confirmExport = confirm(
-      'سيتم دمج الترجمة في الفيديو بشكل دائم. قد تستغرق هذه العملية بعض الوقت. هل تريد المتابعة؟'
+      `سيتم دمج ${trackLabel} في الفيديو بشكل دائم. قد تستغرق هذه العملية بعض الوقت. هل تريد المتابعة؟`
     );
     if (!confirmExport) return;
 
     try {
       setExportStatus({ status: 'starting', message: 'بدء عملية التصدير...', progress: 0 });
-      await projectService.exportProjectVideo(projectId, subtitleConfig);
+      // Include track selection in the export config
+      const exportConfig = { ...subtitleConfig, track: trackToExport };
+      await projectService.exportProjectVideo(projectId, exportConfig);
     } catch (error) {
       console.error('Failed to start video export:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       alert(`فشل في بدء عملية تصدير الفيديو: ${errorMessage}`);
       setExportStatus(null);
     }
-  }, [projectId, subtitleConfig, exportStatus]);
+  }, [projectId, subtitleConfig, exportStatus, activeTrack]);
 
   const handleTimeUpdate = useCallback(
     (time: number) => {
@@ -494,10 +571,18 @@ export function useProjectEditor(): UseProjectEditorReturn {
     exportStatus,
     videoInfo: videoInfo as VideoInfo | null,
 
-    // Subtitle state
+    // Subtitle state (source language)
     subtitles,
     activeSubtitle,
     currentTime,
+
+    // Arabic subtitle state (independent track)
+    arabicSubtitles,
+    activeTrack,
+    setActiveTrack,
+    setArabicSubtitles,
+    updateArabicSubtitle,
+    deleteArabicSubtitle,
 
     // Subtitle config
     subtitleConfig: subtitleConfig as Record<string, unknown> | null,
@@ -527,6 +612,7 @@ export function useProjectEditor(): UseProjectEditorReturn {
     handleRetranscribe,
     handleSeekToSubtitle,
     handleRegenerateCaptionsSuccess,
+    refreshSubtitles,
     handleExportSubtitles,
     handleExportVideo,
     handleTimeUpdate,

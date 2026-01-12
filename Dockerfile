@@ -36,7 +36,6 @@ WORKDIR /app
 COPY backend/requirements.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip uv pip install --system --no-cache-dir -r requirements.txt
 RUN python -c "import whisper; whisper.load_model('turbo')"
-RUN python -m spacy download en_core_web_sm
 
 # Copy backend code
 COPY backend/app ./app

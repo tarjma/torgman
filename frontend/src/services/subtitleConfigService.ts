@@ -82,9 +82,10 @@ export const subtitleConfigService = {
   },
 
   async translateProjectSubtitles(projectId: string): Promise<void> {
-    await apiClient.post(`/api/projects/${projectId}/translate`, {
-      source_language: 'en',
-      target_language: 'ar'
-    });
+    await apiClient.post(`/api/projects/${projectId}/translate`);
+  },
+
+  async generateCaptions(projectId: string): Promise<void> {
+    await apiClient.post(`/api/projects/${projectId}/generate-captions`);
   }
 };

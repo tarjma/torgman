@@ -71,7 +71,8 @@ const HomePageContainer = () => {
   };
 
   const handleOpenProject = (project: Project) => {
-    if (project.status === 'transcribed' || project.status === 'completed') {
+    const accessibleStatuses = ['words_ready', 'captions_generated', 'translated', 'transcribed', 'completed'];
+    if (accessibleStatuses.includes(project.status)) {
       navigate(`/${project.id}`);
     } else {
       alert(`المشروع لا يزال قيد المعالجة. الحالة: ${project.status}`);

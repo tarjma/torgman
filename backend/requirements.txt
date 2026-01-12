@@ -11,4 +11,6 @@ openai-whisper
 librosa
 ffmpeg-python
 google-genai
-spacy
+pyannote.audio
+torch
+torchaudio

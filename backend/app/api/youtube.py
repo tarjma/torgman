@@ -179,7 +179,9 @@ async def process_youtube_video(request: YouTubeProcessRequest):
         request.project_id, 
         request.resolution,
         request.language,
-        request.audio_language
+        request.audio_language,
+        request.enable_diarization,
+        request.num_speakers
     ))
     
     return {

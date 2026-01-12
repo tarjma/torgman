@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Search, Grid, List, Languages, FileText, Settings } from 'lucide-react';
+import { Plus, Search, Grid, List, Languages, FileText, Settings, Sparkles } from 'lucide-react';
 import { Project } from '../types';
 import ProjectCard from './ProjectCard';
 import ApiKeyModal from './ApiKeyModal';
+import ModelSelectionModal from './ModelSelectionModal';
 import { useApiKey } from '../hooks/useApiKey';
 
 interface HomePageProps {
@@ -21,6 +22,7 @@ const HomePage: React.FC<HomePageProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showModelModal, setShowModelModal] = useState(false);
   const { status: apiKeyStatus, reloadStatus } = useApiKey();
 
   // Handle modal close
@@ -48,6 +50,16 @@ const HomePage: React.FC<HomePageProps> = ({
             </div>
             
             <div className="flex items-center gap-4">
+              {/* Model Selection Button */}
+              <button
+                onClick={() => setShowModelModal(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
+                title="اختيار نموذج الذكاء الاصطناعي"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span className="hidden sm:inline">النموذج</span>
+              </button>
+              
               {/* API Key Status Indicator */}
               {apiKeyStatus && (
                 <button
@@ -164,6 +176,12 @@ const HomePage: React.FC<HomePageProps> = ({
         isOpen={showApiKeyModal} 
         onClose={handleCloseApiKeyModal}
         onApiKeyChanged={reloadStatus}
+      />
+      
+      {/* Model Selection Modal */}
+      <ModelSelectionModal
+        isOpen={showModelModal}
+        onClose={() => setShowModelModal(false)}
       />
     </div>
   );

@@ -54,20 +54,7 @@ export const useProjectSubtitleUpdates = (
            'جاري معالجة التصدير...');
         
         onStatusUpdate(status, messageText);
-        
-        // If export is completed, show download link
-        if (status === 'export_completed' && (message.download_url || message.data?.download_url)) {
-          // Create a temporary link to trigger download
-          const downloadUrl = message.data?.download_url || message.download_url;
-          const filename = message.data?.filename || message.filename || 'exported_video.mp4';
-          
-          const link = document.createElement('a');
-          link.href = `${window.location.origin}${downloadUrl}`;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }
+        // Download handling is done in ProjectEditor/index.tsx WebSocket handler
       } else {
         // Handle other status updates (translation, etc.)
         onStatusUpdate(message.status || message.type, message.message || 'Processing...');

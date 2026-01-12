@@ -5,6 +5,7 @@ import { projectService } from '../services/projectService';
 interface UseAutoSaveOptions {
   projectId: string | null;
   subtitles: Subtitle[];
+  arabicSubtitles?: Subtitle[];
   onSaveStart?: () => void;
   onSaveComplete?: () => void;
   onSaveError?: (error: any) => void;
@@ -14,6 +15,7 @@ interface UseAutoSaveOptions {
 export const useAutoSave = ({
   projectId,
   subtitles,
+  arabicSubtitles = [],
   onSaveStart,
   onSaveComplete,
   onSaveError,
@@ -21,6 +23,7 @@ export const useAutoSave = ({
 }: UseAutoSaveOptions) => {
   const saveTimeoutRef = useRef<number>();
   const lastSavedRef = useRef<string>('');
+  const lastArabicSavedRef = useRef<string>('');
   const isSavingRef = useRef(false);
 
   // Generate a hash of current subtitles to detect changes
@@ -38,12 +41,17 @@ export const useAutoSave = ({
 
   // Save subtitles to backend
   const saveSubtitles = useCallback(async () => {
-    if (!projectId || !subtitles.length || isSavingRef.current) {
+    if (!projectId || isSavingRef.current) {
       return;
     }
 
     const currentHash = getSubtitlesHash(subtitles);
-    if (currentHash === lastSavedRef.current) {
+    const currentArabicHash = getSubtitlesHash(arabicSubtitles);
+    
+    const hasSourceChanges = subtitles.length > 0 && currentHash !== lastSavedRef.current;
+    const hasArabicChanges = arabicSubtitles.length > 0 && currentArabicHash !== lastArabicSavedRef.current;
+    
+    if (!hasSourceChanges && !hasArabicChanges) {
       return; // No changes to save
     }
 
@@ -51,26 +59,41 @@ export const useAutoSave = ({
       isSavingRef.current = true;
       onSaveStart?.();
 
-      // Convert frontend subtitles to backend format (now using consistent field names)
-      const backendSubtitles = subtitles.map((subtitle) => ({
-        start_time: subtitle.start_time,
-        end_time: subtitle.end_time,
-        text: subtitle.originalText || subtitle.text,
-        translation: subtitle.translatedText,
-        confidence: subtitle.confidence || 1.0,
-        styling: subtitle.styling
-      }));
+      // Save source subtitles if changed
+      if (hasSourceChanges) {
+        const backendSubtitles = subtitles.map((subtitle) => ({
+          start_time: subtitle.start_time,
+          end_time: subtitle.end_time,
+          text: subtitle.originalText || subtitle.text,
+          translation: subtitle.translatedText,
+          confidence: subtitle.confidence || 1.0,
+          styling: subtitle.styling
+        }));
 
-      await projectService.updateProjectSubtitles(projectId, backendSubtitles);
-      
-      lastSavedRef.current = currentHash;
+        await projectService.updateProjectSubtitles(projectId, backendSubtitles);
+        lastSavedRef.current = currentHash;
+      }
+
+      // Save Arabic subtitles if changed
+      if (hasArabicChanges) {
+        const backendArabicSubtitles = arabicSubtitles.map((subtitle) => ({
+          start_time: subtitle.start_time,
+          end_time: subtitle.end_time,
+          text: subtitle.originalText || subtitle.text,
+          confidence: subtitle.confidence || 1.0
+        }));
+
+        await projectService.updateArabicSubtitles(projectId, backendArabicSubtitles);
+        lastArabicSavedRef.current = currentArabicHash;
+      }
+
       onSaveComplete?.();
     } catch (error) {
       onSaveError?.(error);
     } finally {
       isSavingRef.current = false;
     }
-  }, [projectId, subtitles, getSubtitlesHash, onSaveStart, onSaveComplete, onSaveError]);
+  }, [projectId, subtitles, arabicSubtitles, getSubtitlesHash, onSaveStart, onSaveComplete, onSaveError]);
 
   // Debounced auto-save trigger
   const triggerAutoSave = useCallback(() => {
@@ -95,12 +118,12 @@ export const useAutoSave = ({
     await saveSubtitles();
   }, [saveSubtitles]);
 
-  // Auto-save when subtitles change
+  // Auto-save when subtitles change (source or Arabic)
   useEffect(() => {
-    if (subtitles.length > 0) {
+    if (subtitles.length > 0 || arabicSubtitles.length > 0) {
       triggerAutoSave();
     }
-  }, [subtitles, triggerAutoSave]);
+  }, [subtitles, arabicSubtitles, triggerAutoSave]);
 
   // Cleanup on unmount
   useEffect(() => {

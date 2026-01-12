@@ -208,6 +208,35 @@ class ProjectManager:
             logger.error(f"Error getting subtitles for project {project_id}: {e}")
             return []
     
+    def get_arabic_subtitles(self, project_id: str) -> List[CaptionData]:
+        """Get Arabic subtitles for a project"""
+        try:
+            project_dir = settings.get_project_dir(project_id)
+            arabic_subtitles_path = project_dir / "arabic_subtitles.json"
+            
+            if not arabic_subtitles_path.exists():
+                return []
+            
+            with open(arabic_subtitles_path, 'r', encoding='utf-8') as f:
+                subtitles_data = json.load(f)
+            
+            subtitles = []
+            for subtitle in subtitles_data:
+                start_time = subtitle.get("start_time", subtitle.get("start", 0))
+                end_time = subtitle.get("end_time", subtitle.get("end", 0))
+                subtitles.append(CaptionData(
+                    start_time=start_time,
+                    end_time=end_time,
+                    text=subtitle["text"],
+                    confidence=subtitle.get("confidence"),
+                    translation=subtitle.get("translation")
+                ))
+            
+            return subtitles
+        except Exception as e:
+            logger.error(f"Error getting Arabic subtitles for project {project_id}: {e}")
+            return []
+    
     def _load_project_from_dir(self, project_dir: Path) -> Optional[ProjectData]:
         """Load project data from a project directory"""
         try:
@@ -233,6 +262,9 @@ class ProjectManager:
                 # Backward compatibility: accept either source_language or legacy language key
                 source_language=metadata.get("source_language", metadata.get("language", "en")),
                 subtitle_count=int(metadata.get("subtitle_count", 0)),
+                word_count=int(metadata.get("word_count", 0)),
+                has_captions=metadata.get("has_captions", False),
+                has_translation=metadata.get("has_translation", False),
                 created_at=datetime.fromisoformat(metadata["created_at"]) if metadata.get("created_at") else None,
                 updated_at=datetime.fromisoformat(metadata["updated_at"]) if metadata.get("updated_at") else None
             )

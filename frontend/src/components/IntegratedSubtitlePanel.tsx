@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Plus, Edit3, Trash2, Copy, Wand2, Clock, Settings, Save, FileText, ChevronUp, ChevronDown, Languages, Palette } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Plus, Edit3, Trash2, Copy, Wand2, Clock, Settings, Save, FileText, ChevronUp, ChevronDown, Languages, Palette, Sparkles } from 'lucide-react';
 import { Subtitle } from '../types';
 import { useSubtitleConfig } from '../hooks/useSubtitleConfig';
 import FontSelector from './FontSelector';
@@ -7,60 +7,87 @@ import SubtitleStylePanel from './SubtitleStylePanel';
 
 interface IntegratedSubtitlePanelProps {
   subtitles: Subtitle[];
+  arabicSubtitles: Subtitle[];
+  activeTrack: 'source' | 'arabic' | 'both';
+  setActiveTrack: (track: 'source' | 'arabic' | 'both') => void;
   activeSubtitle: string | null;
   currentTime: number;
-  videoTitle: string;
   projectId?: string;
+  projectStatus?: string;
+  wordCount?: number;
   translationStatus?: { status: string; message: string; progress?: number } | null;
   onAddSubtitle: (startTime: number, endTime: number) => void;
   onUpdateSubtitle: (id: string, updates: Partial<Subtitle>) => void;
+  onUpdateArabicSubtitle: (id: string, updates: Partial<Subtitle>) => void;
   onDeleteSubtitle: (id: string) => void;
-  onSelectSubtitle: (id: string) => void;
+  onDeleteArabicSubtitle: (id: string) => void;
   onDuplicateSubtitle: (id: string) => void;
   onTranslateText: (text: string) => Promise<void>;
   onSeekToSubtitle: (startTime: number, subtitleId: string) => void;
   isTranslating: boolean;
   isAutoSaving: boolean;
   onTriggerAutoSave?: () => void;
+  onSubtitlesUpdated?: () => void;
 }
 
-const PRESET_COLORS = ['#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#ffff00'];
+const PRESET_COLORS = ['#ffffff', '#000000', '#ff0000'];
 
 const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
   subtitles,
+  arabicSubtitles,
+  activeTrack,
+  setActiveTrack,
   activeSubtitle,
   currentTime,
-  videoTitle,
   projectId,
+  projectStatus,
+  wordCount,
   translationStatus,
   onAddSubtitle,
   onUpdateSubtitle,
+  onUpdateArabicSubtitle,
   onDeleteSubtitle,
+  onDeleteArabicSubtitle,
   onDuplicateSubtitle,
   onTranslateText,
   onSeekToSubtitle,
   isTranslating,
   isAutoSaving,
-  onTriggerAutoSave
+  onTriggerAutoSave,
+  onSubtitlesUpdated
 }) => {
   const [expandedSubtitle, setExpandedSubtitle] = useState<string | null>(null);
   const [isTranslatingProject, setIsTranslatingProject] = useState(false);
+  const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
   const [translatingSubtitleId, setTranslatingSubtitleId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'captions' | 'style'>('captions');
-  const { translateProject } = useSubtitleConfig();
+  const { translateProject, generateCaptions } = useSubtitleConfig();
 
-  // Handle WebSocket translation status updates
+  // Handle WebSocket status updates for both caption generation and translation
   useEffect(() => {
     if (translationStatus) {
-      if (translationStatus.status === 'completed' || translationStatus.status === 'completion') {
+      const status = translationStatus.status;
+      
+      // Handle caption generation completion
+      if (status === 'captions_generated') {
+        setIsGeneratingCaptions(false);
+        onSubtitlesUpdated?.();
+      }
+      
+      // Handle translation completion
+      if (status === 'translated' || status === 'completed' || status === 'completion') {
         setIsTranslatingProject(false);
-      } else if (translationStatus.status === 'error') {
+        onSubtitlesUpdated?.();
+      } else if (status === 'error') {
         setIsTranslatingProject(false);
-      } else if (translationStatus.status === 'translating') {
+        setIsGeneratingCaptions(false);
+      } else if (status === 'translating') {
         setIsTranslatingProject(true);
+      } else if (status === 'generating_captions') {
+        setIsGeneratingCaptions(true);
       }
     }
-  }, [translationStatus]);
+  }, [translationStatus, onSubtitlesUpdated]);
 
   // Ref for auto-scrolling to active subtitle
   const activeSubtitleRef = useRef<HTMLDivElement>(null);
@@ -95,6 +122,14 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
     }
   }, [activeSubtitle]);
 
+  // Compute which subtitles to display based on the active track
+  const displaySubtitles = useMemo(() => {
+    if (activeTrack === 'arabic') {
+      return arabicSubtitles;
+    }
+    return subtitles;
+  }, [activeTrack, subtitles, arabicSubtitles]);
+
   const handleAddSubtitle = useCallback(() => {
     const startTime = Math.floor(currentTime);
     const endTime = startTime + 3;
@@ -107,18 +142,29 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
     if (field === 'originalText') {
       updates.text = value; // Keep text field in sync with originalText
     }
-    onUpdateSubtitle(id, updates);
+    
+    // Use appropriate update function based on active track
+    if (activeTrack === 'arabic') {
+      onUpdateArabicSubtitle(id, updates);
+    } else {
+      onUpdateSubtitle(id, updates);
+    }
     
     // Trigger auto-save after text change
     if (onTriggerAutoSave) {
       onTriggerAutoSave();
     }
-  }, [onUpdateSubtitle, onTriggerAutoSave]);
+  }, [activeTrack, onUpdateSubtitle, onUpdateArabicSubtitle, onTriggerAutoSave]);
 
   const handleTimeChange = useCallback((id: string, field: 'start_time' | 'end_time', value: string) => {
     const timeValue = parseFloat(value);
     if (!isNaN(timeValue)) {
-      onUpdateSubtitle(id, { [field]: timeValue });
+      // Use appropriate update function based on active track
+      if (activeTrack === 'arabic') {
+        onUpdateArabicSubtitle(id, { [field]: timeValue });
+      } else {
+        onUpdateSubtitle(id, { [field]: timeValue });
+      }
       
       // Trigger auto-save after time change
       if (onTriggerAutoSave) {
@@ -235,6 +281,41 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
     // Don't set isTranslatingProject to false here - let WebSocket status updates handle it
   }, [projectId, translateProject]);
 
+  const handleGenerateCaptions = useCallback(async () => {
+    if (!projectId) {
+      alert('معرف المشروع غير متوفر');
+      return;
+    }
+    
+    try {
+      setIsGeneratingCaptions(true);
+      
+      // Ensure WebSocket connection before starting
+      try {
+        const { wsManager } = await import('../services/websocket');
+        
+        if (!wsManager.checkConnectionHealth()) {
+          await wsManager.forceReconnect();
+        } else {
+          await wsManager.ensureActiveConnection();
+        }
+      } catch {
+        // Continue even if WebSocket has issues
+      }
+      
+      await generateCaptions(projectId);
+    } catch (error: any) {
+      let errorMessage = 'فشل في توليد الكابتشن. حاول مرة أخرى.';
+      if (error.response?.status === 400 && error.response?.data?.detail?.includes('API key')) {
+        errorMessage = 'مفتاح Gemini API غير صحيح أو غير متوفر. يرجى تكوين مفتاح API من الإعدادات.';
+      }
+      
+      alert(errorMessage);
+      setIsGeneratingCaptions(false);
+    }
+    // Don't set isGeneratingCaptions to false here - let WebSocket status updates handle it
+  }, [projectId, generateCaptions]);
+
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
@@ -292,45 +373,66 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
           </button>
           
           {projectId && (
-            <div className="flex flex-col">
-              <button
-                onClick={handleTranslateProject}
-                disabled={isTranslatingProject}
-                className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-300 px-4 py-3 rounded-lg text-sm flex items-center gap-2 transition-all font-medium"
-                title="ترجمة جميع النصوص إلى العربية"
-              >
-                <Languages className={`w-4 h-4 ${isTranslatingProject ? 'animate-spin' : ''}`} />
-                {isTranslatingProject ? 
-                  (translationStatus?.message || 'جاري الترجمة...') : 
-                  'ترجمة المشروع'
-                }
-              </button>
+            <div className="flex gap-2">
+              {/* Generate Captions Button - shows when no captions or words_ready */}
+              {(subtitles.length === 0 || projectStatus === 'words_ready') && (
+                <button
+                  onClick={handleGenerateCaptions}
+                  disabled={isGeneratingCaptions}
+                  className="bg-purple-500 hover:bg-purple-400 disabled:bg-purple-300 px-4 py-3 rounded-lg text-sm flex items-center gap-2 transition-all font-medium"
+                  title="توليد الكابتشن من الكلمات المستخرجة"
+                >
+                  <Sparkles className={`w-4 h-4 ${isGeneratingCaptions ? 'animate-spin' : ''}`} />
+                  {isGeneratingCaptions ? 
+                    (translationStatus?.message || 'جاري التوليد...') : 
+                    'توليد الكابتشن'
+                  }
+                </button>
+              )}
               
-              {/* Translation progress indicator */}
-              {isTranslatingProject && (
-                <div className="mt-2 bg-white/20 rounded-lg p-2">
-                  <div className="flex items-center gap-2 text-xs text-white">
-                    <div className="w-2 h-2 bg-emerald-300 rounded-full animate-pulse"></div>
-                    <span>
-                      {translationStatus?.status === 'translating' 
-                        ? 'جاري الترجمة...' 
-                        : 'معالجة الطلب...'
-                      }
-                    </span>
-                  </div>
-                  {translationStatus?.progress !== undefined && (
-                    <div className="mt-1 bg-white/30 rounded-full h-1 overflow-hidden">
-                      <div 
-                        className="bg-emerald-300 h-full transition-all duration-300"
-                        style={{ width: `${translationStatus.progress}%` }}
-                      ></div>
-                    </div>
-                  )}
-                </div>
+              {/* Translate Button - shows when captions exist */}
+              {subtitles.length > 0 && (
+                <button
+                  onClick={handleTranslateProject}
+                  disabled={isTranslatingProject}
+                  className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-300 px-4 py-3 rounded-lg text-sm flex items-center gap-2 transition-all font-medium"
+                  title="ترجمة جميع النصوص إلى العربية"
+                >
+                  <Languages className={`w-4 h-4 ${isTranslatingProject ? 'animate-spin' : ''}`} />
+                  {isTranslatingProject ? 
+                    (translationStatus?.message || 'جاري الترجمة...') : 
+                    'ترجمة المشروع'
+                  }
+                </button>
               )}
             </div>
           )}
         </div>
+        
+        {/* Progress indicators */}
+        {projectId && (isGeneratingCaptions || isTranslatingProject) && (
+          <div className="mt-2 bg-white/20 rounded-lg p-2">
+            <div className="flex items-center gap-2 text-xs text-white">
+              <div className={`w-2 h-2 ${isGeneratingCaptions ? 'bg-purple-300' : 'bg-emerald-300'} rounded-full animate-pulse`}></div>
+              <span>
+                {isGeneratingCaptions 
+                  ? 'جاري توليد الكابتشن...' 
+                  : isTranslatingProject
+                    ? 'جاري الترجمة...'
+                    : 'معالجة الطلب...'
+                }
+              </span>
+            </div>
+            {translationStatus?.progress !== undefined && (
+              <div className="mt-1 bg-white/30 rounded-full h-1 overflow-hidden">
+                <div 
+                  className={`${isGeneratingCaptions ? 'bg-purple-300' : 'bg-emerald-300'} h-full transition-all duration-300`}
+                  style={{ width: `${translationStatus.progress}%` }}
+                ></div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* View Toggle - Captions vs Style */}
@@ -361,6 +463,38 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
         </div>
       </div>
 
+      {/* Track Toggle - Source vs Arabic (only when in captions view and Arabic subtitles exist) */}
+      {activeView === 'captions' && arabicSubtitles.length > 0 && (
+        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-2">
+          <div className="flex items-center gap-2">
+            <Languages className="w-4 h-4 text-gray-500" />
+            <span className="text-xs text-gray-500 ml-1">المسار:</span>
+            <div className="flex bg-gray-100 rounded-lg p-0.5 flex-1">
+              <button
+                onClick={() => setActiveTrack('source')}
+                className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  activeTrack === 'source'
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                النص الأصلي ({subtitles.length})
+              </button>
+              <button
+                onClick={() => setActiveTrack('arabic')}
+                className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  activeTrack === 'arabic'
+                    ? 'bg-emerald-100 text-emerald-700 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                الترجمة العربية ({arabicSubtitles.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Content Area - Either Captions or Style */}
       {activeView === 'style' ? (
         <div className="flex-1 overflow-y-auto">
@@ -371,24 +505,49 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
           ref={subtitleListRef}
           className="flex-1 overflow-y-auto bg-gray-50"
         >
-          {subtitles.length === 0 ? (
+          {displaySubtitles.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full py-12 px-6 text-center">
-              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Edit3 className="w-10 h-10 text-blue-500" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">لا توجد ترجمات بعد</h3>
-              <p className="text-gray-500 mb-6 max-w-xs">ابدأ بإضافة ترجمة جديدة لتظهر على الفيديو</p>
-            <button
-              onClick={handleAddSubtitle}
-              className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 flex items-center gap-2 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-            >
-              <Plus className="w-5 h-5" />
-              إضافة ترجمة
-            </button>
+              {projectStatus === 'words_ready' ? (
+                <>
+                  <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Sparkles className="w-10 h-10 text-purple-500" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">تم استخراج الكلمات بنجاح!</h3>
+                  <p className="text-gray-500 mb-2 max-w-xs">
+                    {wordCount ? `تم استخراج ${wordCount} كلمة من الفيديو` : 'جاهز لتوليد الكابتشن'}
+                  </p>
+                  <p className="text-gray-400 text-sm mb-6 max-w-xs">
+                    اضغط على "توليد الكابتشن" لإنشاء ترجمات طبيعية
+                  </p>
+                  <button
+                    onClick={handleGenerateCaptions}
+                    disabled={isGeneratingCaptions}
+                    className="bg-purple-600 text-white px-6 py-3 rounded-xl hover:bg-purple-700 disabled:bg-purple-300 flex items-center gap-2 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  >
+                    <Sparkles className={`w-5 h-5 ${isGeneratingCaptions ? 'animate-spin' : ''}`} />
+                    {isGeneratingCaptions ? 'جاري التوليد...' : 'توليد الكابتشن'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Edit3 className="w-10 h-10 text-blue-500" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">لا توجد ترجمات بعد</h3>
+                  <p className="text-gray-500 mb-6 max-w-xs">ابدأ بإضافة ترجمة جديدة لتظهر على الفيديو</p>
+                  <button
+                    onClick={handleAddSubtitle}
+                    className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 flex items-center gap-2 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  >
+                    <Plus className="w-5 h-5" />
+                    إضافة ترجمة
+                  </button>
+                </>
+              )}
           </div>
         ) : (
           <div className="p-4 space-y-3">
-            {subtitles.map((subtitle) => (
+            {displaySubtitles.map((subtitle) => (
               <div
                 key={subtitle.id}
                 ref={activeSubtitle === subtitle.id ? activeSubtitleRef : null}
@@ -420,17 +579,20 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAutoTranslate(subtitle);
-                        }}
-                        disabled={isTranslating || translatingSubtitleId === subtitle.id}
-                        className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-50"
-                        title="ترجمة تلقائية"
-                      >
-                        <Wand2 className={`w-4 h-4 ${translatingSubtitleId === subtitle.id ? 'animate-spin' : ''}`} />
-                      </button>
+                      {/* Auto-translate button - only show for source track */}
+                      {activeTrack === 'source' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAutoTranslate(subtitle);
+                          }}
+                          disabled={isTranslating || translatingSubtitleId === subtitle.id}
+                          className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-50"
+                          title="ترجمة تلقائية"
+                        >
+                          <Wand2 className={`w-4 h-4 ${translatingSubtitleId === subtitle.id ? 'animate-spin' : ''}`} />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -454,7 +616,11 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onDeleteSubtitle(subtitle.id);
+                          if (activeTrack === 'arabic') {
+                            onDeleteArabicSubtitle(subtitle.id);
+                          } else {
+                            onDeleteSubtitle(subtitle.id);
+                          }
                         }}
                         className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
                         title="حذف"
@@ -478,35 +644,56 @@ const IntegratedSubtitlePanel: React.FC<IntegratedSubtitlePanelProps> = ({
                   
                   {/* Text Editing */}
                   <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">النص الأصلي</label>
-                      <textarea
-                        value={subtitle.text || subtitle.originalText || ''}
-                        onChange={(e) => handleTextChange(subtitle.id, 'originalText', e.target.value)}
-                        className={`w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                          isAutoSaving ? 'bg-green-50 border-green-300' : ''
-                        }`}
-                        rows={2}
-                        placeholder="النص الأصلي..."
-                        dir="ltr"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">الترجمة العربية</label>
-                      <textarea
-                        value={subtitle.translatedText}
-                        onChange={(e) => handleTextChange(subtitle.id, 'translatedText', e.target.value)}
-                        className={`w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                          isAutoSaving ? 'bg-green-50 border-green-300' : ''
-                        }`}
-                        rows={2}
-                        placeholder="الترجمة العربية..."
-                        dir="rtl"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
+                    {activeTrack === 'arabic' ? (
+                      /* Arabic track: single text field for Arabic captions */
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1.5">النص العربي</label>
+                        <textarea
+                          value={subtitle.text || subtitle.originalText || ''}
+                          onChange={(e) => handleTextChange(subtitle.id, 'originalText', e.target.value)}
+                          className={`w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                            isAutoSaving ? 'bg-green-50 border-green-300' : ''
+                          }`}
+                          rows={2}
+                          placeholder="النص العربي..."
+                          dir="rtl"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    ) : (
+                      /* Source track: original text and translation fields */
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1.5">النص الأصلي</label>
+                          <textarea
+                            value={subtitle.text || subtitle.originalText || ''}
+                            onChange={(e) => handleTextChange(subtitle.id, 'originalText', e.target.value)}
+                            className={`w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                              isAutoSaving ? 'bg-green-50 border-green-300' : ''
+                            }`}
+                            rows={2}
+                            placeholder="النص الأصلي..."
+                            dir="ltr"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1.5">الترجمة العربية</label>
+                          <textarea
+                            value={subtitle.translatedText}
+                            onChange={(e) => handleTextChange(subtitle.id, 'translatedText', e.target.value)}
+                            className={`w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                              isAutoSaving ? 'bg-green-50 border-green-300' : ''
+                            }`}
+                            rows={2}
+                            placeholder="الترجمة العربية..."
+                            dir="rtl"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 

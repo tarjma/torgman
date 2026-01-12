@@ -4,7 +4,7 @@ import { WebSocketMessage } from '../types/websocket';
 
 export interface ProjectProcessingUpdateHandler {
   (projectId: string, updates: {
-    status?: 'processing' | 'transcribed' | 'completed' | 'error' | 'failed';
+    status?: 'processing' | 'words_ready' | 'captions_generated' | 'translated' | 'transcribed' | 'completed' | 'error' | 'failed';
     progress?: number;
     currentStage?: string; // Current backend stage
     stageMessage?: string; // Arabic message for stage
@@ -28,14 +28,30 @@ export const useProjectStatusUpdates = (
     switch (type) {
       case 'status':
         if (status) {
-          // Map backend status to frontend status
-          let newStatus: 'processing' | 'transcribed' | 'completed' | 'error' | 'failed' = 'processing';
-          if (status === 'transcribed') {
-            newStatus = 'transcribed';
-          } else if (status === 'completed') {
-            newStatus = 'completed';
-          } else if (status === 'error' || status === 'failed') {
-            newStatus = 'failed';
+          // Intermediate processing states that shouldn't change the project's main status
+          // These are UI-only states for showing progress during caption generation/translation
+          const intermediateStates = ['generating_captions', 'saving', 'translating'];
+          const isIntermediate = intermediateStates.includes(status);
+          
+          // Map backend status to frontend status (only for final states)
+          let newStatus: 'processing' | 'words_ready' | 'captions_generated' | 'translated' | 'transcribed' | 'completed' | 'error' | 'failed' | undefined = undefined;
+          
+          if (!isIntermediate) {
+            if (status === 'words_ready') {
+              newStatus = 'words_ready';
+            } else if (status === 'captions_generated') {
+              newStatus = 'captions_generated';
+            } else if (status === 'translated') {
+              newStatus = 'translated';
+            } else if (status === 'transcribed') {
+              newStatus = 'transcribed';
+            } else if (status === 'completed') {
+              newStatus = 'completed';
+            } else if (status === 'error' || status === 'failed') {
+              newStatus = 'failed';
+            } else if (status === 'processing' || status === 'downloading_video' || status === 'extracting_audio') {
+              newStatus = 'processing';
+            }
           }
           
           // Map backend status to user-friendly Arabic messages
@@ -44,7 +60,13 @@ export const useProjectStatusUpdates = (
             'downloading_thumbnail': 'جاري تحميل الصورة المصغرة...',
             'extracting_audio': 'جاري استخراج الصوت من الفيديو...',
             'generating_subtitles': 'جاري توليد الترجمات باستخدام الذكاء الاصطناعي...',
+            'generating_captions': 'جاري توليد الكابتشن...',
+            'translating': 'جاري ترجمة المشروع...',
+            'saving': 'جاري حفظ البيانات...',
             'saving_data': 'جاري حفظ البيانات...',
+            'words_ready': 'الكلمات جاهزة! يمكنك توليد الكابتشن.',
+            'captions_generated': 'تم توليد الكابتشن بنجاح!',
+            'translated': 'تمت الترجمة بنجاح!',
             'transcribed': 'اكتمل التفريغ بنجاح!',
             'completed': 'اكتملت الترجمة بنجاح!',
             'processing': 'جاري المعالجة...',
@@ -52,12 +74,18 @@ export const useProjectStatusUpdates = (
             'failed': 'فشلت المعالجة'
           };
           
-          updateProjectCallback(project_id, {
-            status: newStatus,
+          // Build update object - only include status if it's a final state change
+          const update: Parameters<ProjectProcessingUpdateHandler>[1] = {
             progress: progress || 0,
             currentStage: status,
-            stageMessage: stageMessages[status] || 'جاري المعالجة...'
-          });
+            stageMessage: stageMessages[status] || message.message || 'جاري المعالجة...'
+          };
+          
+          if (newStatus !== undefined) {
+            update.status = newStatus;
+          }
+          
+          updateProjectCallback(project_id, update);
         }
         break;
       

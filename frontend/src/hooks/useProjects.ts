@@ -4,11 +4,14 @@ import { youtubeService } from '../services/youtubeService';
 import { wsManager } from '../services/websocket';
 
 // Map backend ProjectData to frontend Project type
-interface Project extends Omit<ProjectData, 'youtube_url' | 'subtitle_count'> {
+interface Project extends Omit<ProjectData, 'youtube_url' | 'subtitle_count' | 'word_count' | 'has_captions' | 'has_translation'> {
   videoTitle: string;
   videoUrl?: string;
   videoFile?: string;
   subtitlesCount: number;
+  wordCount?: number;
+  hasCaptions?: boolean;
+  hasTranslation?: boolean;
   userId: string;
   thumbnail?: string;
   createdAt: Date;
@@ -21,6 +24,9 @@ const toFrontendProject = (project: ProjectData, userId: string | undefined): Pr
   videoTitle: project.title,
   videoUrl: project.youtube_url,
   subtitlesCount: project.subtitle_count,
+  wordCount: project.word_count,
+  hasCaptions: project.has_captions,
+  hasTranslation: project.has_translation,
   userId: userId || 'default',
   createdAt: project.created_at ? new Date(project.created_at) : new Date(),
   updatedAt: project.updated_at ? new Date(project.updated_at) : new Date()

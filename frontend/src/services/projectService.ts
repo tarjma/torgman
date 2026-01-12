@@ -8,9 +8,12 @@ export interface ProjectData {
   description?: string;
   youtube_url?: string;
   duration: number;
-  status: 'draft' | 'processing' | 'transcribed' | 'completed' | 'error';
+  status: 'draft' | 'processing' | 'words_ready' | 'captions_generated' | 'translated' | 'transcribed' | 'completed' | 'error';
   language: string;
   subtitle_count: number;
+  word_count?: number;
+  has_captions?: boolean;
+  has_translation?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -46,8 +49,17 @@ export const projectService = {
     return response.data;
   },
 
+  async getArabicSubtitles(projectId: string): Promise<CaptionData[]> {
+    const response = await apiClient.get(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/arabic-subtitles`);
+    return response.data;
+  },
+
   async updateProjectSubtitles(projectId: string, subtitles: any[]): Promise<void> {
     await apiClient.put(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/subtitles`, subtitles);
+  },
+
+  async updateArabicSubtitles(projectId: string, subtitles: any[]): Promise<void> {
+    await apiClient.put(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/arabic-subtitles`, subtitles);
   },
 
   async updateSubtitleText(projectId: string, subtitleIndex: number, text: string, translation?: string): Promise<void> {
@@ -148,10 +160,16 @@ export const projectService = {
   },
 
   async translateProjectSubtitles(projectId: string): Promise<void> {
-    await apiClient.post(`/api/projects/${projectId}/translate`, {
-      source_language: 'en',
-      target_language: 'ar'
-    });
+    await apiClient.post(`/api/projects/${projectId}/translate`);
+  },
+
+  async generateCaptions(projectId: string): Promise<{
+    message: string;
+    project_id: string;
+    status: string;
+  }> {
+    const response = await apiClient.post(`/api/projects/${projectId}/generate-captions`);
+    return response.data;
   },
 
   async exportVideoWithSubtitles(

@@ -34,16 +34,22 @@ const ProjectEditorPage = () => {
     exportStatus,
     videoInfo,
     
-    // Subtitle state
+    // Subtitle state (source language)
     subtitles,
     activeSubtitle,
     currentTime,
+    
+    // Arabic subtitle state (independent track)
+    arabicSubtitles,
+    activeTrack,
+    setActiveTrack,
+    updateArabicSubtitle,
+    deleteArabicSubtitle,
     
     // Translation
     isTranslating,
     
     // Actions
-    setActiveSubtitle,
     addSubtitle,
     updateSubtitle,
     deleteSubtitle,
@@ -60,6 +66,7 @@ const ProjectEditorPage = () => {
     handleRetranscribe,
     handleSeekToSubtitle,
     handleRegenerateCaptionsSuccess,
+    refreshSubtitles,
     handleExportSubtitles,
     handleExportVideo,
     handleTimeUpdate,
@@ -254,21 +261,27 @@ const ProjectEditorPage = () => {
         <div className="w-96 bg-white border-r border-gray-200 flex flex-col flex-shrink-0 overflow-hidden">
           <IntegratedSubtitlePanel
             subtitles={subtitles}
+            arabicSubtitles={arabicSubtitles}
+            activeTrack={activeTrack}
+            setActiveTrack={setActiveTrack}
             activeSubtitle={activeSubtitle}
             currentTime={currentTime}
-            videoTitle={videoInfo.title}
             projectId={projectId || undefined}
+            projectStatus={project?.status as string | undefined}
+            wordCount={project?.wordCount as number | undefined}
             translationStatus={translationStatus}
             onAddSubtitle={(startTime, endTime) => addSubtitle(startTime, endTime)}
             onUpdateSubtitle={(id, updates) => updateSubtitle(id, updates)}
+            onUpdateArabicSubtitle={(id, updates) => updateArabicSubtitle(id, updates)}
             onDeleteSubtitle={deleteSubtitle}
-            onSelectSubtitle={setActiveSubtitle}
+            onDeleteArabicSubtitle={deleteArabicSubtitle}
             onDuplicateSubtitle={duplicateSubtitle}
             onTranslateText={async (text) => { await handleTranslateText(text); }}
             onSeekToSubtitle={handleSeekToSubtitle}
             isTranslating={isTranslating}
             isAutoSaving={isAutoSaving}
             onTriggerAutoSave={triggerAutoSave}
+            onSubtitlesUpdated={refreshSubtitles}
           />
         </div>
 
@@ -277,14 +290,16 @@ const ProjectEditorPage = () => {
           <VideoPlayer
             videoFile={videoInfo.file}
             videoSrc={videoInfo.url}
-            subtitles={subtitles}
+            subtitles={activeTrack === 'arabic' ? arabicSubtitles : subtitles}
             currentTime={currentTime}
             onTimeUpdate={handleTimeUpdate}
             onDurationChange={() => {}}
             sourceLangCode={
-              (project?.source_language as string) || 
-              (project?.language as string) || 
-              videoInfo.source_language
+              activeTrack === 'arabic' 
+                ? 'AR' 
+                : ((project?.source_language as string) || 
+                   (project?.language as string) || 
+                   videoInfo.source_language)
             }
           />
         </div>

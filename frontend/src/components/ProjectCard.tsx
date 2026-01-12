@@ -21,9 +21,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   const [justCompleted, setJustCompleted] = useState(false);
   const [previousStatus, setPreviousStatus] = useState(project.status);
   
-  // Watch for completion - show animation when transitioning from 'processing' to 'transcribed' or 'completed'
+  // Watch for completion - show animation when transitioning from 'processing' to a completed state
   useEffect(() => {
-    if (previousStatus === 'processing' && (project.status === 'transcribed' || project.status === 'completed')) {
+    const completedStates = ['words_ready', 'captions_generated', 'translated', 'transcribed', 'completed'];
+    if (previousStatus === 'processing' && completedStates.includes(project.status)) {
       setJustCompleted(true);
       // Show success animation for 2 seconds
       const timer = setTimeout(() => setJustCompleted(false), 2000);
@@ -88,8 +89,19 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
     }
   };
 
-  const getStatusColor = (status: Project['status']) => {
+  const getStatusColor = (status: Project['status'], hasTranslation?: boolean) => {
+    // If project has Arabic translation, show green (completed) color
+    if (hasTranslation) {
+      return 'bg-green-100 text-green-800';
+    }
+    
     switch (status) {
+      case 'words_ready':
+        return 'bg-purple-100 text-purple-800';
+      case 'captions_generated':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'translated':
+        return 'bg-green-100 text-green-800';
       case 'transcribed':
         return 'bg-yellow-100 text-yellow-800';
       case 'completed':
@@ -103,8 +115,19 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
     }
   };
 
-  const getStatusText = (status: Project['status']) => {
+  const getStatusText = (status: Project['status'], hasTranslation?: boolean) => {
+    // If project has Arabic translation, show that regardless of underlying status
+    if (hasTranslation) {
+      return 'ترجمة مكتملة';
+    }
+    
     switch (status) {
+      case 'words_ready':
+        return 'جاهز للتوليد';
+      case 'captions_generated':
+        return 'كابتشن جاهز';
+      case 'translated':
+        return 'ترجمة مكتملة';
       case 'transcribed':
         return 'تفريغ مكتمل';
       case 'completed':
@@ -321,8 +344,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             </div>
             
             <div className="flex items-center justify-between">
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(project.status)}`}>
-                {getStatusText(project.status)}
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(project.status, project.hasTranslation)}`}>
+                {getStatusText(project.status, project.hasTranslation)}
               </span>
               <button
                 onClick={(e) => {
@@ -367,8 +390,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                   {project.videoTitle}
                 </p>
               </div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 mr-2 ${getStatusColor(project.status)}`}>
-                {getStatusText(project.status)}
+              <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 mr-2 ${getStatusColor(project.status, project.hasTranslation)}`}>
+                {getStatusText(project.status, project.hasTranslation)}
               </span>
             </div>
             

@@ -8,6 +8,9 @@ export interface CaptionMargin {
 }
 
 export interface SubtitleConfig {
+  // Track selection: 'source' for original subtitles, 'arabic' for Arabic translations
+  track?: 'source' | 'arabic';
+  
   // Basic text properties
   fontSize: string;        // Font size in points (e.g., "28")
   fontFamily: string;      // Font family name

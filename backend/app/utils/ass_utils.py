@@ -382,10 +382,19 @@ def get_video_resolution(video_path: str) -> tuple[int, int]:
     logger.info("Using default resolution: 1280x720")
     return 1280, 720
 
-def save_ass_file(project_id: str, subtitles: List[CaptionData], style_config: SubtitleConfig, video_width: int = None, video_height: int = None) -> Path:
-    """Save ASS subtitle file for a project with proper resolution matching"""
+def save_ass_file(project_id: str, subtitles: List[CaptionData], style_config: SubtitleConfig, video_width: int = None, video_height: int = None, filename: str = "subtitles.ass") -> Path:
+    """Save ASS subtitle file for a project with proper resolution matching
+    
+    Args:
+        project_id: The project ID
+        subtitles: List of caption data
+        style_config: Subtitle styling configuration
+        video_width: Optional video width (auto-detected if not provided)
+        video_height: Optional video height (auto-detected if not provided)
+        filename: Output filename (default: "subtitles.ass", use "arabic_subtitles.ass" for Arabic track)
+    """
     project_dir = settings.get_project_dir(project_id)
-    ass_path = project_dir / "subtitles.ass"
+    ass_path = project_dir / filename
     
     # If resolution not provided, try to detect from video file
     if video_width is None or video_height is None:

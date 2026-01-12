@@ -12,6 +12,7 @@ interface SubtitleConfigContextType {
   resetConfig: () => Promise<void>;
   reloadConfig: () => Promise<void>;
   translateProject: (projectId: string) => Promise<void>;
+  generateCaptions: (projectId: string) => Promise<void>;
 }
 
 const SubtitleConfigContext = createContext<SubtitleConfigContextType | null>(null);
@@ -79,6 +80,11 @@ export const SubtitleConfigProvider: React.FC<{ children: ReactNode }> = ({ chil
     await subtitleConfigService.translateProjectSubtitles(projectId);
   }, []);
 
+  const generateCaptions = useCallback(async (projectId: string) => {
+    setError(null);
+    await subtitleConfigService.generateCaptions(projectId);
+  }, []);
+
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
@@ -101,7 +107,8 @@ export const SubtitleConfigProvider: React.FC<{ children: ReactNode }> = ({ chil
       updateField,
       resetConfig,
       reloadConfig: loadConfig,
-      translateProject
+      translateProject,
+      generateCaptions
     }}>
       {children}
     </SubtitleConfigContext.Provider>

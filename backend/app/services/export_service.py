@@ -35,11 +35,20 @@ class ExportService:
             raise FileNotFoundError("Original video file not found for export.")
         video_path = video_files[0]
         
-        # Get subtitles from project manager
+        # Get subtitles from project manager based on selected track
         project_manager = get_project_manager()
-        subtitles = project_manager.get_project_subtitles(project_id)
-        if not subtitles:
-            raise ValueError("No subtitles found for this project.")
+        track = config.track if config else "source"
+        
+        if track == "arabic":
+            subtitles = project_manager.get_arabic_subtitles(project_id)
+            if not subtitles:
+                raise ValueError("No Arabic subtitles found for this project.")
+            logger.info(f"Using Arabic subtitles track for export (project: {project_id})")
+        else:
+            subtitles = project_manager.get_project_subtitles(project_id)
+            if not subtitles:
+                raise ValueError("No subtitles found for this project.")
+            logger.info(f"Using source subtitles track for export (project: {project_id})")
         
         # Use provided config override if passed; otherwise load per-project then global config
         if config is None:

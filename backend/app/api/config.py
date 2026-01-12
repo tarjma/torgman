@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -11,6 +12,139 @@ from ..core.config import settings
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/config", tags=["config"])
 
+
+# Available Gemini 3 models
+AVAILABLE_MODELS = [
+    {"id": "gemini-3-flash-preview", "name": "Gemini 3 Flash", "description": "Fast and cost-effective (recommended)"},
+    {"id": "gemini-3-pro-preview", "name": "Gemini 3 Pro", "description": "Highest quality translations"},
+]
+DEFAULT_MODEL = "gemini-3-flash-preview"
+
+# Subtitle best practices constraints (Netflix/broadcast standards)
+# These can be made configurable in the future via UI
+SUBTITLE_MAX_CHARS_PER_LINE = 42  # Netflix standard
+SUBTITLE_MAX_LINES_PER_CAPTION = 2
+SUBTITLE_MAX_DURATION = 7.0  # seconds
+SUBTITLE_MIN_DURATION = 0.7  # seconds
+SUBTITLE_MAX_CPS = 21  # Characters per second (comfortable reading speed)
+
+
+class ConfigService:
+    """
+    Unified configuration service that provides a single source of truth
+    for all application configuration: API keys, LLM models, and subtitle styles.
+    """
+    
+    def __init__(self):
+        self.config_dir: Path = settings.data_dir / "config"
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+    
+    # === API Key Management ===
+    
+    def get_api_key(self) -> Optional[str]:
+        """Get Gemini API key. Checks environment first, then config file."""
+        env_key = os.getenv("GEMINI_API_KEY")
+        if env_key:
+            return env_key
+        
+        config_path = self.config_dir / "api-key.json"
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+                return config_data.get("gemini_api_key")
+        
+        return None
+    
+    def get_api_key_source(self) -> str:
+        """Get the source of the API key: 'environment', 'user_set', or 'none'."""
+        if os.getenv("GEMINI_API_KEY"):
+            return "environment"
+        
+        config_path = self.config_dir / "api-key.json"
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+                if config_data.get("gemini_api_key"):
+                    return "user_set"
+        
+        return "none"
+    
+    def set_api_key(self, api_key: str) -> None:
+        """Save user-provided API key to config file."""
+        config_path = self.config_dir / "api-key.json"
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump({"gemini_api_key": api_key.strip()}, f, indent=2)
+        logger.info("API key configuration updated")
+    
+    def clear_api_key(self) -> None:
+        """Remove user-set API key (falls back to environment variable)."""
+        config_path = self.config_dir / "api-key.json"
+        if config_path.exists():
+            config_path.unlink()
+        logger.info("User API key cleared")
+    
+    # === LLM Model Management ===
+    
+    def get_llm_model(self) -> str:
+        """Get the configured LLM model for caption generation."""
+        config_path = self.config_dir / "llm-config.json"
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+                return config_data.get("caption_model", DEFAULT_MODEL)
+        return DEFAULT_MODEL
+    
+    def set_llm_model(self, model: str) -> None:
+        """Set the LLM model for caption generation."""
+        valid_models = [m["id"] for m in AVAILABLE_MODELS]
+        if model not in valid_models:
+            raise ValueError(f"Invalid model: {model}. Available: {valid_models}")
+        
+        config_path = self.config_dir / "llm-config.json"
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump({"caption_model": model}, f, indent=2)
+        logger.info(f"LLM model set to: {model}")
+    
+    def get_available_models(self) -> list:
+        """Get list of available LLM models."""
+        return AVAILABLE_MODELS
+    
+    # === Subtitle Style Management ===
+    
+    def get_subtitle_style(self) -> dict:
+        """Get current subtitle style configuration."""
+        config_path = self.config_dir / "subtitle-config.json"
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {}  # Return empty dict to use defaults
+    
+    def set_subtitle_style(self, style: dict) -> None:
+        """Save subtitle style configuration."""
+        config_path = self.config_dir / "subtitle-config.json"
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(style, f, indent=2)
+        logger.info("Subtitle style configuration updated")
+    
+    def reset_subtitle_style(self) -> None:
+        """Reset subtitle style to defaults by removing config file."""
+        config_path = self.config_dir / "subtitle-config.json"
+        if config_path.exists():
+            config_path.unlink()
+        logger.info("Subtitle style reset to defaults")
+
+
+# Singleton instance
+_config_service: ConfigService = None
+
+
+def get_config_service() -> ConfigService:
+    """Get the singleton ConfigService instance."""
+    global _config_service
+    if _config_service is None:
+        _config_service = ConfigService()
+    return _config_service
+
 class CaptionMargin(BaseModel):
     left: float = 10.0  # The left margin, in pixels. Minimum distance from the left edge of the video.
     right: float = 10.0  # The right margin, in pixels. Minimum distance from the right edge of the video.
@@ -20,6 +154,9 @@ class CaptionMargin(BaseModel):
     top: float = 10.0
 
 class SubtitleConfig(BaseModel):
+    # Track selection: 'source' for original subtitles, 'arabic' for Arabic translations
+    track: Optional[str] = "source"
+    
     # Basic text properties
     fontSize: Optional[str] = "28"  # Font size in points
     fontFamily: Optional[str] = "Noto Sans Arabic"  # Only font verified to work with libass
@@ -67,29 +204,28 @@ class ApiKeyConfig(BaseModel):
 
 class ApiKeyStatus(BaseModel):
     has_api_key: bool
-    api_key_source: str  # "environment" or "user_set"
+    api_key_source: str  # "environment", "user_set", or "none"
+
+class LLMModelConfig(BaseModel):
+    caption_model: str = "gemini-3-flash-preview"
+
+class LLMModelStatus(BaseModel):
+    current_model: str
+    available_models: list
+
+
+# === API Endpoints using ConfigService ===
 
 @router.get("/api-key/status")
 async def get_api_key_status():
     """Get the current API key configuration status"""
-    env_key = os.getenv("GEMINI_API_KEY")
-    
-    # Check if there's a user-set API key in config
-    config_dir = settings.data_dir / "config"
-    api_key_config_path = config_dir / "api-key.json"
-    
-    user_key = None
-    if api_key_config_path.exists():
-        with open(api_key_config_path, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
-            user_key = config_data.get("gemini_api_key")
-    
-    has_api_key = bool(env_key or user_key)
-    api_key_source = "environment" if env_key else ("user_set" if user_key else "none")
+    config_service = get_config_service()
+    api_key = config_service.get_api_key()
+    source = config_service.get_api_key_source()
     
     return ApiKeyStatus(
-        has_api_key=has_api_key,
-        api_key_source=api_key_source
+        has_api_key=bool(api_key),
+        api_key_source=source
     )
 
 @router.post("/api-key")
@@ -98,46 +234,51 @@ async def set_api_key(config: ApiKeyConfig):
     if not config.gemini_api_key.strip():
         raise HTTPException(status_code=400, detail="API key cannot be empty")
     
-    # Save API key to config file
-    config_dir = settings.data_dir / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    
-    api_key_config_path = config_dir / "api-key.json"
-    
-    config_data = {
-        "gemini_api_key": config.gemini_api_key.strip()
-    }
-    
-    with open(api_key_config_path, 'w', encoding='utf-8') as f:
-        json.dump(config_data, f, indent=2)
-    
-    logger.info("API key configuration updated successfully")
+    config_service = get_config_service()
+    config_service.set_api_key(config.gemini_api_key)
     return {"message": "API key set successfully"}
 
 @router.delete("/api-key")
 async def clear_api_key():
     """Clear the user-set API key (will fall back to environment variable if available)"""
-    config_dir = settings.data_dir / "config"
-    api_key_config_path = config_dir / "api-key.json"
-    
-    if api_key_config_path.exists():
-        api_key_config_path.unlink()
-    
-    logger.info("User API key configuration cleared")
+    config_service = get_config_service()
+    config_service.clear_api_key()
     return {"message": "API key cleared successfully"}
+
+
+@router.get("/llm-model", response_model=LLMModelStatus)
+async def get_llm_model_config():
+    """Get current LLM model configuration"""
+    config_service = get_config_service()
+    return LLMModelStatus(
+        current_model=config_service.get_llm_model(),
+        available_models=config_service.get_available_models()
+    )
+
+@router.put("/llm-model")
+async def set_llm_model_config(config: LLMModelConfig):
+    """Set the LLM model for caption generation"""
+    config_service = get_config_service()
+    valid_models = [m["id"] for m in config_service.get_available_models()]
+    
+    if config.caption_model not in valid_models:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid model. Available models: {', '.join(valid_models)}"
+        )
+    
+    config_service.set_llm_model(config.caption_model)
+    return {"message": f"Model set to {config.caption_model}"}
+
 
 @router.get("/subtitle-style", response_model=SubtitleConfig)
 async def get_subtitle_config():
     """Get current subtitle configuration"""
-    config_path = settings.data_dir / "config" / "subtitle-config.json"
-    
-    if config_path.exists():
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
-        return SubtitleConfig(**config_data)
-    else:
-        # Return default configuration
-        return SubtitleConfig()
+    config_service = get_config_service()
+    style_data = config_service.get_subtitle_style()
+    if style_data:
+        return SubtitleConfig(**style_data)
+    return SubtitleConfig()
 
 @router.get("/subtitle-style/default", response_model=SubtitleConfig)
 async def get_default_subtitle_config():
@@ -147,26 +288,13 @@ async def get_default_subtitle_config():
 @router.put("/subtitle-style")
 async def update_subtitle_config(config: SubtitleConfig):
     """Update global subtitle configuration"""
-    config_dir = settings.data_dir / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    
-    config_path = config_dir / "subtitle-config.json"
-    
-    with open(config_path, 'w', encoding='utf-8') as f:
-        json.dump(config.model_dump(), f, indent=2)
-    
-    logger.info(f"Subtitle configuration updated: {config_path}")
+    config_service = get_config_service()
+    config_service.set_subtitle_style(config.model_dump())
     return {"message": "Subtitle configuration updated successfully"}
 
 @router.post("/subtitle-style/reset")
 async def reset_subtitle_config():
     """Reset subtitle configuration to defaults"""
-    config_dir = settings.data_dir / "config"
-    config_path = config_dir / "subtitle-config.json"
-    
-    # Remove the config file to reset to defaults
-    if config_path.exists():
-        config_path.unlink()
-    
-    logger.info("Subtitle configuration reset to defaults")
+    config_service = get_config_service()
+    config_service.reset_subtitle_style()
     return {"message": "Subtitle configuration reset to defaults"}

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from ..core.config import settings
 from ..models.project import CaptionData
 from ..services.project_manager import get_project_manager
-from ..services.translation_service import TranslationGenerator
+from ..services.llm_caption_service import get_llm_caption_service
 from .websocket import manager as websocket_manager
 
 logger = logging.getLogger(__name__)
@@ -20,13 +20,10 @@ class TranslationRequest(BaseModel):
     source_language: str = "en"
     target_language: str = "ar"
 
-class ProjectTranslationRequest(BaseModel):
-    source_language: str = "en"
-    target_language: str = "ar"
 
 @router.get("/{project_id}/subtitles", response_model=List[CaptionData])
 async def get_project_subtitles(project_id: str):
-    """Get subtitles for a project"""
+    """Get source language subtitles for a project"""
     project_manager = get_project_manager()
     # Check if project exists
     project = project_manager.get_project(project_id)
@@ -35,6 +32,54 @@ async def get_project_subtitles(project_id: str):
     
     subtitles = project_manager.get_project_subtitles(project_id)
     return subtitles
+
+
+@router.get("/{project_id}/arabic-subtitles", response_model=List[CaptionData])
+async def get_arabic_subtitles(project_id: str):
+    """Get Arabic language subtitles for a project (independent track from source)"""
+    project_manager = get_project_manager()
+    # Check if project exists
+    project = project_manager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_dir = settings.get_project_dir(project_id)
+    arabic_subtitles_path = project_dir / "arabic_subtitles.json"
+    
+    if not arabic_subtitles_path.exists():
+        # Return empty list if no Arabic subtitles yet
+        return []
+    
+    with open(arabic_subtitles_path, 'r', encoding='utf-8') as f:
+        arabic_subtitles = json.load(f)
+    
+    return [CaptionData(**cap) for cap in arabic_subtitles]
+
+
+@router.put("/{project_id}/arabic-subtitles")
+async def update_arabic_subtitles(project_id: str, subtitles_data: List[Dict]):
+    """Update Arabic subtitles (independent track)"""
+    project_manager = get_project_manager()
+    project = project_manager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_dir = settings.get_project_dir(project_id)
+    arabic_subtitles_path = project_dir / "arabic_subtitles.json"
+    
+    # Save Arabic subtitles
+    with open(arabic_subtitles_path, 'w', encoding='utf-8') as f:
+        json.dump(subtitles_data, f, ensure_ascii=False, indent=2)
+    
+    # Regenerate Arabic ASS file
+    from ..utils.ass_utils import save_ass_file
+    from ..api.config import SubtitleConfig
+    default_config = SubtitleConfig()
+    arabic_caption_objects = [CaptionData(**cap) for cap in subtitles_data]
+    save_ass_file(project_id, arabic_caption_objects, default_config, filename="arabic_subtitles.ass")
+    
+    return {"message": "Arabic subtitles updated successfully", "count": len(subtitles_data)}
+
 
 @router.put("/{project_id}/subtitles/{subtitle_index}")
 async def update_subtitle(project_id: str, subtitle_index: int, subtitle_data: Dict):
@@ -114,86 +159,18 @@ async def update_project_subtitles(project_id: str, subtitles_data: List[Dict]):
         "count": len(subtitles_list)
     }
 
-@router.post("/{project_id}/translate")
-async def translate_project_subtitles(project_id: str, request: ProjectTranslationRequest):
-    """Kick off one-shot translation in the background to avoid HTTP timeouts.
-    Progress and results are delivered over the project's WebSocket channel."""
-    project_manager = get_project_manager()
 
-    async def _background_translate():
-        # Load subtitles
-        subs = project_manager.get_project_subtitles(project_id)
-        logger.info(f"One-shot translation for project {project_id} to {request.target_language}, segments={len(subs)}")
-        await websocket_manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "status",
-            "status": "translating",
-            "message": f"جاري ترجمة {len(subs)} جملة دفعة واحدة...",
-            "progress": 5
-        })
-        translation_generator = TranslationGenerator()
-        loop = asyncio.get_event_loop()
-        translated = await loop.run_in_executor(
-            None,
-            translation_generator.translate_transcription,
-            subs,
-            request.source_language,
-            request.target_language,
-        )
-        project_dir = settings.get_project_dir(project_id)
-        subtitles_path = project_dir / "subtitles.json"
-        with open(subtitles_path, 'w', encoding='utf-8') as f:
-            json.dump([s.model_dump() for s in translated], f, ensure_ascii=False, indent=2)
-        
-        # Update project status to "completed" since all subtitles are now translated
-        project_manager.update_project_status(project_id, "completed", len(translated))
-        
-        await websocket_manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "subtitles",
-            "data": [s.model_dump() for s in translated]
-        })
-        await websocket_manager.send_to_project(project_id, {
-            "project_id": project_id,
-            "type": "status",
-            "status": "translation_completed",
-            "message": f"اكتملت ترجمة {len(translated)} جملة.",
-            "progress": 100
-        })
-
-    asyncio.create_task(_background_translate())
-    return {
-        "message": "Translation started",
-        "project_id": project_id,
-        "status": "translating",
-        "source_language": request.source_language,
-        "target_language": request.target_language
-    }
-
-@router.post("/translate-text")
-async def translate_text_endpoint(request: TranslationRequest):
-    """Translate a single piece of text"""
-    if not request.text.strip():
-        raise HTTPException(status_code=400, detail="Text is required")
+@router.post("/{project_id}/generate-captions")
+async def generate_captions(project_id: str):
+    """
+    Generate source language captions from word-level data using LLM.
     
-    translation_generator = TranslationGenerator()
-    # Single caption translation (sync) executed in thread to avoid blocking if needed
-    import asyncio
-    loop = asyncio.get_event_loop()
-    translated = await loop.run_in_executor(
-        None, translation_generator.translate_caption, request.text, request.source_language, request.target_language
-    )
-    return {"translation": translated}
-
-class RegenerateCaptionsRequest(BaseModel):
-    max_chars_per_line: int = 42
-    max_lines_per_caption: int = 2
-    max_caption_duration: int = 7
-    max_cps: int = 17
-
-@router.post("/{project_id}/regenerate-captions")
-async def regenerate_captions(project_id: str, request: RegenerateCaptionsRequest):
-    """Regenerate captions with custom parameters using stored word-level data"""
+    This endpoint is triggered manually by the user after word extraction.
+    It uses Gemini 3 to create natural, readable captions from word timestamps.
+    
+    Requires: words.json from transcription (status: words_ready)
+    Result: Creates subtitles.json with source captions (status: captions_generated)
+    """
     project_manager = get_project_manager()
     project = project_manager.get_project(project_id)
     if not project:
@@ -204,72 +181,241 @@ async def regenerate_captions(project_id: str, request: RegenerateCaptionsReques
     
     if not words_path.exists():
         raise HTTPException(
-            status_code=404, 
-            detail="لم يتم العثور على بيانات الكلمات. هذا المشروع قديم ولا يدعم هذه الميزة. يرجى إنشاء مشروع جديد للاستفادة من تخصيص الترجمات."
+            status_code=404,
+            detail="لم يتم العثور على بيانات الكلمات. يرجى معالجة الفيديو أولاً."
         )
     
-    # Load word-level data
-    with open(words_path, 'r', encoding='utf-8') as f:
-        words = json.load(f)
+    async def _background_generate_captions():
+        # Load word-level data
+        with open(words_path, 'r', encoding='utf-8') as f:
+            words = json.load(f)
+        
+        # Get detected language from project metadata
+        metadata_path = project_dir / "metadata.json"
+        detected_language = "en"
+        if metadata_path.exists():
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+                detected_language = metadata.get("source_language", "en")
+        
+        logger.info(f"Generating source captions for project {project_id}: {len(words)} words in {detected_language}")
+        
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "status",
+            "status": "generating_captions",
+            "message": f"جاري توليد الكابتشن من {len(words)} كلمة...",
+            "progress": 10
+        })
+        
+        # Generate source language captions using LLM
+        llm_service = get_llm_caption_service()
+        loop = asyncio.get_event_loop()
+        source_captions = await loop.run_in_executor(
+            None,
+            llm_service.generate_source_captions,
+            words,
+            detected_language
+        )
+        
+        logger.info(f"Generated {len(source_captions)} source captions")
+        
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "status",
+            "status": "saving",
+            "message": "جاري حفظ الكابتشن...",
+            "progress": 80
+        })
+        
+        # Convert to CaptionData format and save
+        captions_list = []
+        for cap in source_captions:
+            caption_obj = CaptionData(
+                start_time=cap['start_time'],
+                end_time=cap['end_time'],
+                text=cap['text'],
+                confidence=cap.get('confidence', 1.0),
+                translation=None  # No translation yet
+            )
+            captions_list.append(caption_obj.dict())
+        
+        subtitles_path = project_dir / "subtitles.json"
+        with open(subtitles_path, 'w', encoding='utf-8') as f:
+            json.dump(captions_list, f, ensure_ascii=False, indent=2)
+        
+        # Generate ASS file
+        from ..utils.ass_utils import save_ass_file
+        from ..api.config import SubtitleConfig
+        default_config = SubtitleConfig()
+        caption_objects = [CaptionData(**cap) for cap in captions_list]
+        save_ass_file(project_id, caption_objects, default_config)
+        
+        # Update project status and metadata
+        project_manager.update_project_status(project_id, "captions_generated", len(captions_list))
+        project_manager.update_project_metadata(project_id, has_captions=True)
+        
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "subtitles",
+            "data": captions_list
+        })
+        
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "status",
+            "status": "captions_generated",
+            "message": f"تم توليد {len(captions_list)} كابتشن بنجاح!",
+            "progress": 100
+        })
     
-    # Import and regenerate captions with new parameters
-    from ..services.transcription_service import TranscriptionGenerator
-    generator = TranscriptionGenerator()
+    asyncio.create_task(_background_generate_captions())
+    return {
+        "message": "Caption generation started",
+        "project_id": project_id,
+        "status": "generating_captions"
+    }
+
+
+@router.post("/{project_id}/translate")
+async def translate_project(project_id: str):
+    """
+    Generate Arabic translations for project captions using LLM.
     
-    new_captions = generator.regenerate_captions_with_params(
+    This endpoint uses Gemini 3 to create natural Arabic translations
+    directly from word-level data, producing optimally-segmented Arabic captions.
+    
+    Requires: words.json from transcription
+    Updates: subtitles.json with Arabic translations (status: translated)
+    """
+    project_manager = get_project_manager()
+    project = project_manager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_dir = settings.get_project_dir(project_id)
+    words_path = project_dir / "words.json"
+    subtitles_path = project_dir / "subtitles.json"
+    
+    if not words_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="لم يتم العثور على بيانات الكلمات. يرجى معالجة الفيديو أولاً."
+        )
+    
+    async def _background_translate():
+        # Load word-level data
+        with open(words_path, 'r', encoding='utf-8') as f:
+            words = json.load(f)
+        
+        # Get detected language from project metadata
+        metadata_path = project_dir / "metadata.json"
+        detected_language = "en"
+        if metadata_path.exists():
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+                detected_language = metadata.get("source_language", "en")
+        
+        logger.info(f"Generating Arabic translations for project {project_id}: {len(words)} words from {detected_language}")
+        
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "status",
+            "status": "translating",
+            "message": f"جاري ترجمة المشروع إلى العربية...",
+            "progress": 10
+        })
+        
+        # Generate Arabic captions using LLM
+        llm_service = get_llm_caption_service()
+        loop = asyncio.get_event_loop()
+        arabic_captions = await loop.run_in_executor(
+            None,
+            llm_service.generate_arabic_captions,
+            words,
+            detected_language
+        )
+        
+        logger.info(f"Generated {len(arabic_captions)} Arabic captions")
+        
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "status",
+            "status": "saving",
+            "message": "جاري حفظ الترجمة...",
+            "progress": 80
+        })
+        
+        # Save Arabic captions as a SEPARATE track (decoupled from source captions)
+        # This allows Arabic to have its own optimal segmentation
+        arabic_subtitles_path = project_dir / "arabic_subtitles.json"
+        arabic_caption_list = []
+        for cap in arabic_captions:
+            arabic_caption_list.append({
+                "start_time": cap['start_time'],
+                "end_time": cap['end_time'],
+                "text": cap['text'],
+                "confidence": cap.get('confidence', 1.0)
+            })
+        
+        with open(arabic_subtitles_path, 'w', encoding='utf-8') as f:
+            json.dump(arabic_caption_list, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"Saved {len(arabic_caption_list)} Arabic captions to {arabic_subtitles_path}")
+        
+        # Generate Arabic ASS file (separate from source ASS)
+        from ..utils.ass_utils import save_ass_file
+        from ..api.config import SubtitleConfig
+        default_config = SubtitleConfig()
+        arabic_caption_objects = [CaptionData(**cap) for cap in arabic_caption_list]
+        save_ass_file(project_id, arabic_caption_objects, default_config, filename="arabic_subtitles.ass")
+        
+        # Update project status and metadata
+        project_manager.update_project_status(project_id, "translated", len(arabic_caption_list))
+        project_manager.update_project_metadata(project_id, has_translation=True)
+        
+        # Send Arabic captions via WebSocket with track identifier
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "arabic_subtitles",
+            "data": arabic_caption_list
+        })
+        
+        await websocket_manager.send_to_project(project_id, {
+            "project_id": project_id,
+            "type": "status",
+            "status": "translated",
+            "message": f"تم ترجمة {len(arabic_caption_list)} كابتشن بنجاح!",
+            "progress": 100
+        })
+    
+    asyncio.create_task(_background_translate())
+    return {
+        "message": "Translation started",
+        "project_id": project_id,
+        "status": "translating"
+    }
+
+
+@router.post("/translate-text")
+async def translate_text_endpoint(request: TranslationRequest):
+    """Translate a single piece of text using LLM"""
+    if not request.text.strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+    
+    # For single text translation, we'll use a simple approach
+    llm_service = get_llm_caption_service()
+    
+    # Create a simple word list for the text
+    words = [{"word": request.text, "start": 0, "end": 1}]
+    
+    loop = asyncio.get_event_loop()
+    translated_captions = await loop.run_in_executor(
+        None,
+        llm_service.generate_arabic_captions,
         words,
-        request.max_chars_per_line,
-        request.max_lines_per_caption,
-        request.max_caption_duration,
-        request.max_cps
+        request.source_language
     )
     
-    # Preserve existing translations if they exist
-    subtitles_path = project_dir / "subtitles.json"
-    existing_translations = {}
-    if subtitles_path.exists():
-        with open(subtitles_path, 'r', encoding='utf-8') as f:
-            existing_subtitles = json.load(f)
-            # Create a map of text to translation
-            for sub in existing_subtitles:
-                if sub.get('translation'):
-                    # Store by the original text (without line breaks for matching)
-                    original_text = sub.get('text', '').replace('\n', ' ')
-                    existing_translations[original_text] = sub.get('translation')
-    
-    # Try to match translations to new captions (best effort)
-    for caption in new_captions:
-        caption_text = caption['text'].replace('\n', ' ')
-        if caption_text in existing_translations:
-            caption['translation'] = existing_translations[caption_text]
-    
-    # Save updated captions
-    captions_list = []
-    for cap in new_captions:
-        caption_obj = CaptionData(
-            start_time=cap['start_time'],
-            end_time=cap['end_time'],
-            text=cap['text'],
-            confidence=cap.get('confidence', 1.0),
-            translation=cap.get('translation')
-        )
-        captions_list.append(caption_obj.dict())
-    
-    with open(subtitles_path, 'w', encoding='utf-8') as f:
-        json.dump(captions_list, f, ensure_ascii=False, indent=2)
-    
-    # Update project metadata
-    project_manager.update_project_status(project_id, project.status, len(captions_list))
-    
-    # Regenerate ASS file with new captions
-    from ..utils.ass_utils import save_ass_file
-    from ..api.config import SubtitleConfig
-    default_config = SubtitleConfig()
-    caption_objects = [CaptionData(**cap) for cap in captions_list]
-    save_ass_file(project_id, caption_objects, default_config)
-    
-    return {
-        "message": "Captions regenerated successfully",
-        "count": len(captions_list),
-        "data": captions_list
-    }
+    translation = translated_captions[0]["text"] if translated_captions else ""
+    return {"translation": translation}
