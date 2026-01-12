@@ -3,7 +3,7 @@
 A central hub for translation into Arabic powered by different AI tools.
 
 <p align="center">
-  <img width="842" alt="Torgman Demo" src="https://github.com/user-attachments/assets/91a5c236-b60e-4ff2-82f5-c3ce2ff0dfff" />
+  <img width="842" alt="Torgman Demo" src="https://github.com/user-attachments/assets/c10a7288-6988-4ec0-93a6-aa3c5e432913" />
 </p>
 
 ## Quick Start
