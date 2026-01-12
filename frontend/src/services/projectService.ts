@@ -76,6 +76,11 @@ export const projectService = {
     await apiClient.delete(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}`);
   },
 
+  async retryProject(projectId: string): Promise<{ message: string; project_id: string }> {
+    const response = await apiClient.post(`${API_CONFIG.ENDPOINTS.PROJECTS}/${projectId}/retry`);
+    return response.data;
+  },
+
   async retranscribeProject(projectId: string, language?: string): Promise<{
     project_id: string;
     status: string;

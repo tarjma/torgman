@@ -50,6 +50,77 @@ async def delete_project(project_id: str):
     
     return {"message": "Project deleted successfully"}
 
+@router.post("/{project_id}/retry")
+async def retry_project(project_id: str):
+    """Retry processing a stale/failed project"""
+    import json
+    
+    project_manager = get_project_manager()
+    project = project_manager.get_project(project_id)
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if project.status not in ['stale', 'error', 'failed']:
+        raise HTTPException(status_code=400, detail="Project is not in a failed state")
+    
+    # Get the project metadata
+    project_dir = settings.get_project_dir(project_id)
+    metadata_path = project_dir / "metadata.json"
+    
+    with open(metadata_path, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    youtube_url = metadata.get("youtube_url") or metadata.get("video_url")
+    
+    if youtube_url:
+        # Re-trigger YouTube processing
+        from ..tasks.video_processing import process_youtube_video_task
+        
+        # Update status back to processing
+        project_manager.update_project_status(project_id, "processing")
+        
+        # Clear error message from metadata
+        metadata["error_message"] = None
+        metadata["status"] = "processing"
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+        
+        asyncio.create_task(process_youtube_video_task(
+            youtube_url, 
+            project_id, 
+            metadata.get("requested_resolution", "720p"),
+            metadata.get("source_language")
+        ))
+        
+        logger.info(f"Retry started for project {project_id}")
+        return {"message": "Retry started", "project_id": project_id}
+    else:
+        # Check if video file exists for re-processing
+        video_files = list(project_dir.glob(f"{project_id}_video.*"))
+        if video_files:
+            from ..tasks.video_processing import process_video_file_task
+            
+            # Update status back to processing
+            project_manager.update_project_status(project_id, "processing")
+            
+            # Clear error message from metadata
+            metadata["error_message"] = None
+            metadata["status"] = "processing"
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+            
+            asyncio.create_task(process_video_file_task(
+                str(video_files[0]),
+                project_id,
+                metadata.get("source_language")
+            ))
+            
+            logger.info(f"Retry started for project {project_id} (file-based)")
+            return {"message": "Retry started", "project_id": project_id}
+        
+        raise HTTPException(status_code=400, detail="Cannot retry - no source video found")
+
 @router.put("/{project_id}/status")
 async def update_project_status(project_id: str, status_data: dict):
     """Update project status"""

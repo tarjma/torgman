@@ -97,11 +97,11 @@ export interface Project {
   // Renamed backend field: source_language
   source_language?: string; // new preferred
   language?: string; // legacy fallback
-  status: 'draft' | 'processing' | 'words_ready' | 'captions_generated' | 'translated' | 'transcribed' | 'completed' | 'error' | 'failed';
+  status: 'draft' | 'processing' | 'words_ready' | 'captions_generated' | 'translated' | 'transcribed' | 'completed' | 'error' | 'failed' | 'stale';
   progress?: number; // 0-100, tracks processing progress
   currentStage?: string; // Current processing stage (e.g., "downloading_video", "generating_subtitles")
   stageMessage?: string; // User-friendly Arabic message for current stage
-  errorMessage?: string; // Error message when status is 'error' or 'failed'
+  errorMessage?: string; // Error message when status is 'error', 'failed', or 'stale'
   wordCount?: number; // Number of words extracted from transcription
   hasCaptions?: boolean; // Whether source captions have been generated
   hasTranslation?: boolean; // Whether Arabic translation has been generated

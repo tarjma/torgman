@@ -9,13 +9,15 @@ interface ProjectCardProps {
   viewMode: 'grid' | 'list';
   onOpenProject: (project: Project) => void;
   onDeleteProject: (id: string) => void;
+  onRetryProject?: (id: string) => void;
 }
 
 const ProjectCard: React.FC<ProjectCardProps> = ({
   project,
   viewMode,
   onOpenProject,
-  onDeleteProject
+  onDeleteProject,
+  onRetryProject
 }) => {
   // Track recent completion for success animation
   const [justCompleted, setJustCompleted] = useState(false);
@@ -109,7 +111,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       case 'processing':
         return 'bg-blue-100 text-blue-800';
       case 'error':
+      case 'failed':
         return 'bg-red-100 text-red-800';
+      case 'stale':
+        return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -135,7 +140,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       case 'processing':
         return 'جاري المعالجة';
       case 'error':
+      case 'failed':
         return 'خطأ';
+      case 'stale':
+        return 'توقفت المعالجة';
       case 'draft':
         return 'مسودة';
       default:
@@ -144,7 +152,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   };
 
   const isProcessing = project.status === 'processing';
-  const isError = project.status === 'error' || project.status === 'failed';
+  const isError = project.status === 'error' || project.status === 'failed' || project.status === 'stale';
 
   return (
     <div
@@ -241,23 +249,34 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
         </div>
       )}
       
-      {/* Error Overlay */}
+      {/* Error/Stale Overlay */}
       {isError && (
         <div className="absolute inset-0 bg-white bg-opacity-95 rounded-lg flex items-center justify-center z-10 p-6">
           <div className="text-center w-full max-w-xs">
-            {/* Error Icon */}
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+            {/* Icon - different for stale vs error */}
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+              project.status === 'stale' ? 'bg-orange-100' : 'bg-red-100'
+            }`}>
+              {project.status === 'stale' ? (
+                <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ) : (
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
             </div>
             
             {/* Error Message */}
             <p className="text-sm font-medium text-gray-900 mb-2">
-              فشلت معالجة المشروع
+              {project.status === 'stale' ? 'توقفت المعالجة' : 'فشلت معالجة المشروع'}
             </p>
             <p className="text-xs text-gray-600 mb-4 line-clamp-3">
-              {project.errorMessage || project.stageMessage || 'حدث خطأ أثناء المعالجة'}
+              {project.errorMessage || project.stageMessage || 
+               (project.status === 'stale' 
+                 ? 'توقفت المعالجة بشكل غير متوقع. يرجى إعادة المحاولة.' 
+                 : 'حدث خطأ أثناء المعالجة')}
             </p>
             
             {/* Action Buttons */}
@@ -265,8 +284,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  // TODO: Implement retry logic
-                  alert('سيتم إضافة خاصية إعادة المحاولة قريباً');
+                  if (onRetryProject) {
+                    onRetryProject(project.id);
+                  }
                 }}
                 className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
               >
@@ -414,7 +434,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                     if (window.confirm('هذا المشروع قيد المعالجة. هل تريد حذفه؟')) {
                       onDeleteProject(project.id);
                     }
-                  } else {
+                  } else if (window.confirm('هل أنت متأكد من حذف هذا المشروع؟')) {
                     onDeleteProject(project.id);
                   }
                 }}

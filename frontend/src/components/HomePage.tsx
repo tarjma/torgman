@@ -11,13 +11,15 @@ interface HomePageProps {
   onCreateProject: () => void;
   onOpenProject: (project: Project) => void;
   onDeleteProject: (id: string) => void;
+  onRetryProject?: (id: string) => void;
 }
 
 const HomePage: React.FC<HomePageProps> = ({
   projects,
   onCreateProject,
   onOpenProject,
-  onDeleteProject
+  onDeleteProject,
+  onRetryProject
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -165,6 +167,7 @@ const HomePage: React.FC<HomePageProps> = ({
                 viewMode={viewMode}
                 onOpenProject={onOpenProject}
                 onDeleteProject={onDeleteProject}
+                onRetryProject={onRetryProject}
               />
             ))}
           </div>

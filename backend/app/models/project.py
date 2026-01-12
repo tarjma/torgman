@@ -42,7 +42,8 @@ class ProjectData(BaseModel):
     video_file: Optional[str] = None
     thumbnail_file: Optional[str] = None
     duration: float = 0.0
-    status: str = "draft"  # Status: draft, processing, words_ready, captions_generated, translated
+    status: str = "draft"  # Status: draft, processing, words_ready, captions_generated, translated, stale
+    error_message: Optional[str] = None  # Error message for failed/stale projects
     # Renamed from 'language' to explicit 'source_language'
     source_language: str = "en"
     subtitle_count: int = 0

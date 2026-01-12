@@ -9,6 +9,9 @@ import CreateProjectModal from '../components/CreateProjectModal';
 import { useProjects } from '../hooks/useProjects';
 import { useProjectStatusUpdates, useProjectPollingFallback } from '../hooks/useProjectStatusUpdates';
 
+// Services
+import { projectService } from '../services/projectService';
+
 // Types
 import { Project } from '../types';
 
@@ -80,8 +83,18 @@ const HomePageContainer = () => {
   };
 
   const handleDeleteProject = (id: string) => {
-    if (confirm('هل أنت متأكد من حذف هذا المشروع؟')) {
-      deleteProject(id);
+    // Confirmation is handled in ProjectCard for processing projects
+    deleteProject(id);
+  };
+
+  const handleRetryProject = async (id: string) => {
+    try {
+      await projectService.retryProject(id);
+      // Update the project status locally to show it's processing again
+      updateProjectFromWebSocket(id, { status: 'processing', errorMessage: null });
+    } catch (error) {
+      console.error('Failed to retry project:', error);
+      alert('فشل في إعادة المحاولة. يرجى المحاولة مرة أخرى.');
     }
   };
 
@@ -92,6 +105,7 @@ const HomePageContainer = () => {
         onCreateProject={() => setShowCreateModal(true)}
         onOpenProject={handleOpenProject}
         onDeleteProject={handleDeleteProject}
+        onRetryProject={handleRetryProject}
       />
       
       <CreateProjectModal

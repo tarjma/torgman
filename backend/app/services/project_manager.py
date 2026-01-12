@@ -248,6 +248,21 @@ class ProjectManager:
             with open(metadata_path, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
             
+            status = metadata.get("status", "draft")
+            error_message = metadata.get("error_message")
+            
+            # Detect stale "processing" projects (stuck for more than 30 minutes)
+            if status == "processing":
+                updated_at_str = metadata.get("updated_at")
+                if updated_at_str:
+                    last_update = datetime.fromisoformat(updated_at_str)
+                    minutes_since_update = (datetime.now() - last_update).total_seconds() / 60
+                    
+                    if minutes_since_update > 30:  # 30 minute timeout
+                        status = "stale"
+                        error_message = "توقفت المعالجة بشكل غير متوقع. يرجى إعادة المحاولة."
+                        logger.warning(f"Project {project_dir.name} marked as stale (no update for {minutes_since_update:.0f} min)")
+            
             # Convert to ProjectData model with fallbacks for missing fields
             return ProjectData(
                 id=metadata.get("project_id", project_dir.name),
@@ -258,7 +273,8 @@ class ProjectManager:
                 video_file=metadata.get("video_file", ""),
                 thumbnail_file=metadata.get("thumbnail_file", ""),
                 duration=float(metadata.get("duration", 0.0)),
-                status=metadata.get("status", "draft"),
+                status=status,
+                error_message=error_message,
                 # Backward compatibility: accept either source_language or legacy language key
                 source_language=metadata.get("source_language", metadata.get("language", "en")),
                 subtitle_count=int(metadata.get("subtitle_count", 0)),

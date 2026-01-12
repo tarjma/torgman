@@ -1,4 +1,5 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
 from google.genai.errors import ServerError
 from fastapi.responses import JSONResponse
@@ -14,32 +15,139 @@ from .api.subtitles import router as subtitles_router
 from .api.export import router as export_router
 from .core.config import settings
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+
+# === Colored Logging Setup ===
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with colors for different log levels"""
+    
+    # ANSI color codes
+    COLORS = {
+        'DEBUG': '\033[36m',     # Cyan
+        'INFO': '\033[32m',      # Green
+        'WARNING': '\033[33m',   # Yellow
+        'ERROR': '\033[31m',     # Red
+        'CRITICAL': '\033[41m',  # Red background
+    }
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    
+    # Special highlights for important messages
+    HIGHLIGHTS = {
+        'GPU': '\033[35m',       # Magenta for GPU info
+        'CUDA': '\033[35m',      # Magenta for CUDA
+        'Whisper': '\033[34m',   # Blue for Whisper
+        'export': '\033[36m',    # Cyan for export
+        'WebSocket': '\033[33m', # Yellow for WebSocket
+    }
+
+    def format(self, record):
+        # Get the color for this log level
+        color = self.COLORS.get(record.levelname, '')
+        
+        # Format the timestamp
+        timestamp = self.formatTime(record, '%H:%M:%S')
+        
+        # Format level name with padding
+        levelname = f"{record.levelname:<8}"
+        
+        # Get the message
+        message = record.getMessage()
+        
+        # Highlight special keywords in the message
+        for keyword, highlight_color in self.HIGHLIGHTS.items():
+            if keyword.lower() in message.lower():
+                message = message.replace(keyword, f"{highlight_color}{self.BOLD}{keyword}{self.RESET}{color}")
+        
+        # Build the formatted string
+        formatted = f"{self.RESET}\033[90m{timestamp}\033[0m {color}{self.BOLD}{levelname}{self.RESET} {color}{message}{self.RESET}"
+        
+        # Add exception info if present
+        if record.exc_info:
+            formatted += f"\n{self.formatException(record.exc_info)}"
+        
+        return formatted
+
+
+def setup_logging():
+    """Configure colored logging for the application"""
+    # Create handler with colored formatter
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(ColoredFormatter())
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.handlers.clear()
+    root_logger.addHandler(handler)
+    
+    # Also configure uvicorn loggers
+    for logger_name in ['uvicorn', 'uvicorn.access', 'uvicorn.error']:
+        uvi_logger = logging.getLogger(logger_name)
+        uvi_logger.handlers.clear()
+        uvi_logger.addHandler(handler)
+        uvi_logger.propagate = False
+
+
+def check_gpu_availability():
+    """Check and log GPU availability for Whisper"""
+    try:
+        import torch
+        
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # Convert to GB
+            logging.info(f"✅ GPU detected: {gpu_name} ({gpu_memory:.1f} GB)")
+            logging.info(f"✅ CUDA version: {torch.version.cuda}")
+            logging.info("✅ Whisper will use GPU acceleration")
+            return True
+        else:
+            logging.warning("⚠️  No GPU detected - Whisper will use CPU (slower)")
+            logging.warning("⚠️  For GPU support, ensure CUDA is properly installed")
+            return False
+    except ImportError:
+        logging.warning("⚠️  PyTorch not installed - cannot check GPU availability")
+        return False
+    except Exception as e:
+        logging.error(f"❌ Error checking GPU: {e}")
+        return False
+
+
+# Initialize logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events"""
-    # Startup: Initialize application and debug routes
+    # Startup banner
+    logger.info("=" * 50)
+    logger.info("🚀 Starting Torgman (تُرجمان) Backend")
+    logger.info("=" * 50)
+    
+    # Create directories
     settings.projects_dir.mkdir(parents=True, exist_ok=True)
     
-    # Debug: Print registered routes
-    logger.info("=== Registered Routes ===")
-    for route in app.routes:
-        if hasattr(route, 'path') and hasattr(route, 'methods'):
-            logger.info(f"Route: {route.path} - Methods: {route.methods}")
-        elif hasattr(route, 'path'):
-            logger.info(f"Route: {route.path}")
-    logger.info("=========================")
+    # Check GPU availability at startup
+    logger.info("")
+    logger.info("🔍 Checking hardware configuration...")
+    check_gpu_availability()
+    logger.info("")
     
-    logger.info("Application started successfully")
+    # Debug: Print registered routes (condensed)
+    route_count = sum(1 for r in app.routes if hasattr(r, 'methods'))
+    logger.info(f"📡 Registered {route_count} API routes")
+    
+    logger.info("")
+    logger.info("✅ Application started successfully")
+    logger.info("=" * 50)
     
     yield
     
-    # Shutdown: cleanup if needed
-    logger.info("Application shutting down")
+    # Shutdown
+    logger.info("")
+    logger.info("👋 Application shutting down")
+    logger.info("=" * 50)
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
