@@ -1,3 +1,5 @@
+## This project is to be archived because the maintainers believe there is better way to do automatic translation now (Agentic Media Translation) 
+---
 # Torgman (تُرجمان)
 
 A central hub for translation into Arabic powered by different AI tools.
